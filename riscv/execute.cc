@@ -231,6 +231,7 @@ void processor_t::step(size_t n)
       enter_debug_mode(DCSR_CAUSE_HALT);
     }
   }
+
   while (n > 0) {
     size_t instret = 0;
     reg_t pc = state.pc;
@@ -250,6 +251,7 @@ void processor_t::step(size_t n)
        state.pc = pc; \
        instret++; \
      }
+
     try
     {
       take_pending_interrupt();
@@ -273,7 +275,6 @@ void processor_t::step(size_t n)
           }
 
           insn_fetch_t fetch = mmu->load_insn(pc);
-
           if (debug && !state.serialized)
             disasm(fetch.insn);
           pc = execute_insn(this, pc, fetch);

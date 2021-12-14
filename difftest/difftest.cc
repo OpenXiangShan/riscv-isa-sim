@@ -248,17 +248,18 @@ void difftest_raise_intr(uint64_t NO) {
   if (NO & 0xc) {
     s->diff_debugmode();  // Debug Intr
   } else {
-  uint64_t mip_bit = 0x1UL << (NO & 0xf);
-  bool is_timer_interrupt = mip_bit & 0xa0UL;
-  bool is_external_interrupt = mip_bit & 0xb00UL;
-  bool from_outside = !(mip_bit & state->mip->read());
-  bool external_set = (is_timer_interrupt || is_external_interrupt) && from_outside;
+    uint64_t mip_bit = 0x1UL << (NO & 0xf);
+    bool is_timer_interrupt = mip_bit & 0xa0UL;
+    bool is_external_interrupt = mip_bit & 0xb00UL;
+    bool from_outside = !(mip_bit & state->mip->read());
+    bool external_set = (is_timer_interrupt || is_external_interrupt) && from_outside;
     if (external_set) {
       state->mip->backdoor_write_with_mask(mip_bit, mip_bit);
       difftest_exec(1);
       state->mip->backdoor_write_with_mask(mip_bit, ~mip_bit);
-    } else
-    difftest_exec(1);
+    } else {
+      difftest_exec(1);
+    }
   }
 }
 
