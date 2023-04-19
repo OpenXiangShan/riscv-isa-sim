@@ -38,6 +38,7 @@ public:
         FILE *cmd_file); // needed for command line option --cmd
   ~sim_t();
 
+  void step(size_t n); // step through simulation
   // run the simulation to completion
   int run();
   void set_debug(bool value);
@@ -89,7 +90,6 @@ private:
   std::ostream sout_; // used for socket and terminal interface
 
   processor_t* get_core(const std::string& i);
-  void step(size_t n); // step through simulation
   size_t current_step;
   size_t current_proc;
   bool debug;
