@@ -38,7 +38,9 @@ public:
         FILE *cmd_file); // needed for command line option --cmd
   ~sim_t();
 
+#ifdef SPIKE_FUZZ
   void step(size_t n); // step through simulation
+#endif // SPIKE_FUZZ
   // run the simulation to completion
   int run();
   void set_debug(bool value);
@@ -90,7 +92,9 @@ private:
   std::ostream sout_; // used for socket and terminal interface
 
   processor_t* get_core(const std::string& i);
+#ifndef SPIKE_FUZZ
   void step(size_t n); // step through simulation
+#endif // SPIKE_FUZZ
   size_t current_step;
   size_t current_proc;
   bool debug;
