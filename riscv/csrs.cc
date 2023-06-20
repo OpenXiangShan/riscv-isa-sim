@@ -555,9 +555,17 @@ bool mstatus_csr_t::unlogged_write(const reg_t val) noexcept {
 
   const reg_t requested_mpp = proc->legalize_privilege(get_field(val, MSTATUS_MPP));
   const reg_t adjusted_val = set_field(val, MSTATUS_MPP, requested_mpp);
+#ifdef CPU_ROCKET_CHIP
+  reg_t new_mstatus = (read() & ~mask) | (adjusted_val & mask);
+  unsigned fs = (new_mstatus >> 13) & 0x3;
+  if (fs == 0x1 || fs == 0x2) {
+    new_mstatus |= 0x3 << 13;
+  }
+#else
   reg_t new_mstatus = (read() & ~mask) | (adjusted_val & mask);
   new_mstatus = (new_mstatus & MSTATUS_MDT) ? (new_mstatus & ~MSTATUS_MIE) : new_mstatus;
   new_mstatus = (new_mstatus & MSTATUS_SDT) ? (new_mstatus & ~MSTATUS_SIE) : new_mstatus;
+#endif
   maybe_flush_tlb(new_mstatus);
   this->val = adjust_sd(new_mstatus);
   return true;
