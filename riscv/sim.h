@@ -38,9 +38,6 @@ public:
         FILE *cmd_file); // needed for command line option --cmd
   ~sim_t();
 
-#ifdef SPIKE_FUZZ
-  void step(size_t n); // step through simulation
-#endif // SPIKE_FUZZ
   // run the simulation to completion
   int run();
   void set_debug(bool value);
@@ -92,7 +89,9 @@ private:
   std::ostream sout_; // used for socket and terminal interface
 
   processor_t* get_core(const std::string& i);
-#ifndef SPIKE_FUZZ
+#if defined(SPIKE_FUZZ) || defined(DIFFTEST)
+public:
+#endif
   void step(size_t n); // step through simulation
 #endif // SPIKE_FUZZ
   size_t current_step;
@@ -104,7 +103,13 @@ private:
   std::optional<std::function<void()>> next_interactive_action;
 
   // memory-mapped I/O routines
+#if defined(DIFFTEST)
+public:
+#endif
   virtual char* addr_to_mem(reg_t paddr) override;
+#if defined(DIFFTEST)
+private:
+#endif
   virtual bool mmio_load(reg_t paddr, size_t len, uint8_t* bytes) override;
   virtual bool mmio_store(reg_t paddr, size_t len, const uint8_t* bytes) override;
   void set_rom();
