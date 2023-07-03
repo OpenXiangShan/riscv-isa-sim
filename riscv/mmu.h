@@ -285,6 +285,7 @@ public:
   template<typename T>
   bool store_conditional(reg_t addr, T val)
   {
+    sim->is_amo = true;
     bool have_reservation = check_load_reservation(addr, sizeof(T));
 
     if (have_reservation)
