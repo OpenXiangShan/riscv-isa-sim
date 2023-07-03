@@ -181,6 +181,7 @@ public:
   // template for functions that perform an atomic memory operation
   template<typename T, typename op>
   T amo(reg_t addr, op f) {
+    sim->is_amo = true;
     convert_load_traps_to_store_traps({
       store_slow_path(addr, sizeof(T), nullptr, {}, false, true);
       auto lhs = load<T>(addr);
@@ -204,6 +205,7 @@ public:
 
   template<typename T>
   T amo_compare_and_swap(reg_t addr, T comp, T swap) {
+    sim->is_amo = true;
     convert_load_traps_to_store_traps({
       store_slow_path(addr, sizeof(T), nullptr, {}, false, true);
       auto lhs = load<T>(addr);
