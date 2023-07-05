@@ -207,16 +207,16 @@ void state_t::csr_init(processor_t* const proc, reg_t max_isa)
     add_csr(CSR_TINFO, std::make_shared<tinfo_csr_t>(proc, CSR_TINFO));
     add_csr(CSR_TCONTROL, tcontrol = std::make_shared<masked_csr_t>(proc, CSR_TCONTROL, CSR_TCONTROL_MPTE | CSR_TCONTROL_MTE, 0));
   } else {
-    add_csr(CSR_TDATA1, std::make_shared<const_csr_t>(proc, CSR_TDATA1, 0));
-    add_csr(CSR_TDATA2, tdata2 = std::make_shared<const_csr_t>(proc, CSR_TDATA2, 0));
-    add_csr(CSR_TDATA3, std::make_shared<const_csr_t>(proc, CSR_TDATA3, 0));
-    add_csr(CSR_TINFO, std::make_shared<const_csr_t>(proc, CSR_TINFO, 0));
+    add_csr(CSR_TDATA1, std::make_shared<const_dtrig_csr_t>(proc, CSR_TDATA1, 0));
+    add_csr(CSR_TDATA2, tdata2 = std::make_shared<const_dtrig_csr_t>(proc, CSR_TDATA2, 0));
+    add_csr(CSR_TDATA3, std::make_shared<const_dtrig_csr_t>(proc, CSR_TDATA3, 0));
+    add_csr(CSR_TINFO, std::make_shared<const_dtrig_csr_t>(proc, CSR_TINFO, 0));
     add_csr(CSR_TCONTROL, tcontrol = std::make_shared<const_csr_t>(proc, CSR_TCONTROL, 0));
   }
   unsigned scontext_length = (xlen == 32 ? 16 : 32); // debug spec suggests 16-bit for RV32 and 32-bit for RV64
-  add_supervisor_csr(CSR_SCONTEXT, scontext = std::make_shared<masked_csr_t>(proc, CSR_SCONTEXT, (reg_t(1) << scontext_length) - 1, 0));
+  add_supervisor_csr(CSR_SCONTEXT, scontext = std::make_shared<masked_dtrig_csr_t>(proc, CSR_SCONTEXT, (reg_t(1) << scontext_length) - 1, 0));
   unsigned hcontext_length = (xlen == 32 ? 6 : 13) + (proc->extension_enabled('H') ? 1 : 0); // debug spec suggest 7-bit (6-bit) for RV32 and 14-bit (13-bit) for RV64 with (without) H extension
-  auto hcontext = std::make_shared<masked_csr_t>(proc, CSR_HCONTEXT, (reg_t(1) << hcontext_length) - 1, 0);
+  auto hcontext = std::make_shared<masked_dtrig_csr_>(proc, CSR_HCONTEXT, (reg_t(1) << hcontext_length) - 1, 0);
   add_hypervisor_csr(CSR_HCONTEXT, hcontext);
   add_csr(CSR_MCONTEXT, mcontext = std::make_shared<proxy_csr_t>(proc, CSR_MCONTEXT, hcontext));
   add_csr(CSR_MSECCFG, mseccfg = std::make_shared<mseccfg_csr_t>(proc, CSR_MSECCFG));
