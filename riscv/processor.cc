@@ -407,6 +407,16 @@ void processor_t::debug_output_log(std::stringstream *s)
   }
 }
 
+static uint64_t encode_vaddr(uint64_t vaddr) {
+  int64_t hi = (int64_t)vaddr >> 39;
+  if (hi == 0 || hi == -1) {
+    return vaddr;
+  }
+  hi = ((vaddr >> 38) & 0x1) ? 0 : -1;
+  uint64_t mask = (1UL << 39) - 1;
+  return (vaddr & mask) | (hi & (~mask));
+}
+
 void processor_t::take_trap(trap_t& t, reg_t epc)
 {
   unsigned max_xlen = isa.get_max_xlen();
@@ -461,7 +471,11 @@ void processor_t::take_trap(trap_t& t, reg_t epc)
     reg_t vector = (state.vstvec->read() & 1) && interrupt ? 4 * adjusted_cause : 0;
     state.pc = (state.vstvec->read() & ~(reg_t)1) + vector;
     state.vscause->write(adjusted_cause | (interrupt ? interrupt_bit : 0));
+#ifdef CPU_ROCKET_CHIP
+    state.vsepc->write(encode_vaddr(epc));
+#else
     state.vsepc->write(epc);
+#endif
     state.vstval->write(t.get_tval());
 
     reg_t s = state.sstatus->read();
@@ -479,7 +493,11 @@ void processor_t::take_trap(trap_t& t, reg_t epc)
     reg_t vector = (state.nonvirtual_stvec->read() & 1) && interrupt ? 4 * bit : 0;
     state.pc = (state.nonvirtual_stvec->read() & ~(reg_t)1) + vector;
     state.nonvirtual_scause->write(t.cause());
+#ifdef CPU_ROCKET_CHIP
+    state.nonvirtual_sepc->write(encode_vaddr(epc));
+#else
     state.nonvirtual_sepc->write(epc);
+#endif
     state.nonvirtual_stval->write(t.get_tval());
     state.htval->write(t.get_tval2());
     state.htinst->write(t.get_tinst());
@@ -524,7 +542,11 @@ void processor_t::take_trap(trap_t& t, reg_t epc)
     }
 
     state.pc = !nmie ? rnmi_trap_handler_address : trap_handler_address;
+#ifdef CPU_ROCKET_CHIP
+    state.mepc->write(encode_vaddr(epc));
+#else
     state.mepc->write(epc);
+#endif
     state.mcause->write(supv_double_trap ? CAUSE_DOUBLE_TRAP : t.cause());
     state.mtval->write(t.get_tval());
     state.mtval2->write(supv_double_trap ? t.cause() : t.get_tval2());
