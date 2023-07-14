@@ -239,8 +239,11 @@ void state_t::csr_init(processor_t* const proc, reg_t max_isa)
   add_csr(CSR_FCSR, std::make_shared<composite_csr_t>(proc, CSR_FCSR, frm, fflags, FSR_RD_SHIFT));
 
   add_ext_csr(EXT_ZKR, CSR_SEED, std::make_shared<seed_csr_t>(proc, CSR_SEED));
-
+#ifdef CPU_ROCKET_CHIP
+  add_csr(CSR_MARCHID, std::make_shared<const_csr_t>(proc, CSR_MARCHID, 1));
+#else
   add_csr(CSR_MARCHID, std::make_shared<const_csr_t>(proc, CSR_MARCHID, 5));
+#endif
   add_csr(CSR_MIMPID, std::make_shared<const_csr_t>(proc, CSR_MIMPID, 0));
   add_csr(CSR_MVENDORID, std::make_shared<const_csr_t>(proc, CSR_MVENDORID, 0));
   add_csr(CSR_MHARTID, std::make_shared<const_csr_t>(proc, CSR_MHARTID, proc->get_id()));
