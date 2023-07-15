@@ -228,7 +228,7 @@ void state_t::csr_init(processor_t* const proc, reg_t max_isa)
   unsigned hcontext_length = (xlen == 32 ? 6 : 13) + (proc->extension_enabled('H') ? 1 : 0); // debug spec suggest 7-bit (6-bit) for RV32 and 14-bit (13-bit) for RV64 with (without) H extension
   auto hcontext = std::make_shared<masked_dtrig_csr_t>(proc, CSR_HCONTEXT, (reg_t(1) << hcontext_length) - 1, 0);
   add_hypervisor_csr(CSR_HCONTEXT, hcontext);
-  add_csr(CSR_MCONTEXT, mcontext = std::make_shared<proxy_csr_t>(proc, CSR_MCONTEXT, hcontext));
+  add_csr(CSR_MCONTEXT, mcontext = std::make_shared<proxy_dtrig_csr_t>(proc, CSR_MCONTEXT, hcontext));
   add_csr(CSR_MSECCFG, mseccfg = std::make_shared<mseccfg_csr_t>(proc, CSR_MSECCFG));
 
   for (int i = 0; i < max_pmp; ++i) {
