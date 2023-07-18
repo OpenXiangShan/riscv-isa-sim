@@ -246,6 +246,9 @@ void state_t::csr_init(processor_t* const proc, reg_t max_isa)
 #ifdef CPU_ROCKET_CHIP
   add_csr(CSR_MARCHID, std::make_shared<const_csr_t>(proc, CSR_MARCHID, 1));
   add_csr(CSR_MIMPID, std::make_shared<const_csr_t>(proc, CSR_MIMPID, 0x20181004));
+#elif defined(CPU_NUTSHELL)
+  add_csr(CSR_MARCHID, std::make_shared<const_csr_t>(proc, CSR_MARCHID, 0));
+  add_csr(CSR_MIMPID, std::make_shared<const_csr_t>(proc, CSR_MIMPID, 0));
 #else
   add_csr(CSR_MARCHID, std::make_shared<const_csr_t>(proc, CSR_MARCHID, 5));
   add_csr(CSR_MIMPID, std::make_shared<const_csr_t>(proc, CSR_MIMPID, 0));
