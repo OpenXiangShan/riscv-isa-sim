@@ -3,7 +3,7 @@ require(insn.rd() != insn.rs2());
 
 reg_t pos = 0;
 
-VI_GENERAL_LOOP_BASE
+VI_GENERAL_LOOP_BASE(1)
   require(P.VU.vstart->read() == 0);
   require_align(insn.rd(), P.VU.vflmul);
   require_align(insn.rs2(), P.VU.vflmul);
