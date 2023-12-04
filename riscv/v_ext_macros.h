@@ -4,15 +4,33 @@
 #define _RISCV_V_EXT_MACROS_H
 
 #include "vector_unit.h"
+#include "config.h"
 
 template <typename T>
-T setAllBitsToOne(T value) {
-    unsigned char* bytes = reinterpret_cast<unsigned char*>(&value);
-    for (std::size_t i = 0; i < sizeof(T); ++i) {
+T vector_agnostic(T value) {
+#ifdef VARITH_AGNOSTIC_WRITE_ONE
+    constexpr std::size_t chunkSize = sizeof(uint64_t);
+    uint64_t* chunks = reinterpret_cast<uint64_t*>(&value);
+    std::size_t numChunks = sizeof(T) / chunkSize;
+    for (std::size_t i = 0; i < numChunks; ++i) {
+        chunks[i] = 0xFFFFFFFFFFFFFFFF;
+    }
+
+    std::size_t remainingBytes = sizeof(T) % chunkSize;
+    unsigned char* bytes = reinterpret_cast<unsigned char*>(&value) + numChunks * chunkSize;
+    for (std::size_t i = 0; i < remainingBytes; ++i) {
         bytes[i] = 0xFF;
     }
+#endif
     return value;
 }
+
+#ifdef VARITH_AGNOSTIC_WRITE_ONE
+#define VECTOR_AGNOSTIC_BOUNDARY_CHK do{ } while(0)
+#else
+#define VECTOR_AGNOSTIC_BOUNDARY_CHK do{ if(i >=vl ) break; } while(0)
+#endif
+
 //
 // vector: masking skip helper
 //
@@ -246,7 +264,9 @@ static inline bool is_overlapped_widen(const int astart, int asize,
   reg_t UNUSED rs1_num = insn.rs1(); \
   reg_t rs2_num = insn.rs2(); \
   V_EXT_VSTART_CHECK; \
-  for (reg_t i = P.VU.vstart->read(); i < P.VU.VLEN; ++i) {
+  for (reg_t i = P.VU.vstart->read(); i < P.VU.VLEN; ++i) { \
+    VECTOR_AGNOSTIC_BOUNDARY_CHK;
+
 #define VI_LOOP_BASE(factor) \
     VI_GENERAL_LOOP_BASE(factor) \
     VI_LOOP_ELEMENT_SKIP();
@@ -300,13 +320,21 @@ static inline bool is_overlapped_widen(const int astart, int asize,
   for (reg_t i = P.VU.vstart->read(); i < P.VU.VLEN; ++i) { \
     VI_LOOP_ELEMENT_SKIP(); \
     uint64_t mmask = UINT64_C(1) << mpos; \
-    uint64_t &vdi = P.VU.elt<uint64_t>(insn.rd(), midx, true); \
-    uint64_t res = 0;
+    uint64_t &vd = P.VU.elt<uint64_t>(insn.rd(), midx, true); \
+    uint64_t res = 0; \
+    VECTOR_AGNOSTIC_BOUNDARY_CHK;
 
 #define VI_LOOP_CMP_END \
-    vdi = (vdi & ~mmask) | (((res) << mpos) & mmask); \
+    vd = (vd & ~mmask) | (((res) << mpos) & mmask); \
   } \
   P.VU.vstart->write(0);
+
+#ifdef VARITH_AGNOSTIC_WRITE_ONE
+#define VI_LOOP_MASK_AGNOSTIC_FUN \
+  do { if (i >= vl) { res = (res & ~mmask) | ((1ULL << mpos)); } } while (0)
+#else
+#define VI_LOOP_MASK_AGNOSTIC_FUN do { if (i >= vl) { break; } } while (0)
+#endif
 
 #define VI_LOOP_MASK(op) \
   require(P.VU.vsew <= e64); \
@@ -322,10 +350,10 @@ static inline bool is_overlapped_widen(const int astart, int asize,
     uint64_t &res = P.VU.elt<uint64_t>(insn.rd(), midx, true); \
     if(i < vl) \
       res = (res & ~mmask) | ((op) & (1ULL << mpos)); \
-    if (i >= vl) \
-      res = (res & ~mmask) | ((1ULL << mpos)); \
+    VI_LOOP_MASK_AGNOSTIC_FUN; \
   } \
   P.VU.vstart->write(0);
+
 
 #define VI_LOOP_NSHIFT_BASE \
   VI_GENERAL_LOOP_BASE(1); \
@@ -518,6 +546,11 @@ static inline bool is_overlapped_widen(const int astart, int asize,
 //
 // vector: integer and masking operation loop
 //
+#ifdef VARITH_AGNOSTIC_WRITE_ONE
+#define VECTOR_AGNOSTIC_RES_BIT do { res = 1; } while(0)
+#else
+#define VECTOR_AGNOSTIC_RES_BIT do { res = ((vd & mmask) >> mpos); } while(0)
+#endif
 
 #define INSNS_BASE(PARAMS, BODY) \
   if ((true == skip && 1 == P.VU.vma && i < vl) || (i >= vl)) \
@@ -530,28 +563,28 @@ static inline bool is_overlapped_widen(const int astart, int asize,
       BODY; \
     } \
     else \
-      res = 1; \
+      VECTOR_AGNOSTIC_RES_BIT; \
   } else if (sew == e16) { \
     if (1 == mata_action) { \
       PARAMS(e16); \
       BODY; \
     } \
     else \
-      res = 1; \
+      VECTOR_AGNOSTIC_RES_BIT; \
   } else if (sew == e32) { \
     if (1 == mata_action) { \
       PARAMS(e32); \
       BODY; \
     } \
     else \
-      res = 1; \
+      VECTOR_AGNOSTIC_RES_BIT; \
   } else if (sew == e64) { \
     if (1 == mata_action) { \
       PARAMS(e64); \
       BODY; \
     } \
     else \
-      res = 1; \
+      VECTOR_AGNOSTIC_RES_BIT; \
   }
 
 // comparison result to masking register
@@ -610,28 +643,28 @@ static inline bool is_overlapped_widen(const int astart, int asize,
       BODY; \
     } \
     else \
-      vd = 0xFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e16) { \
     VV_PARAMS(e16); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e32) { \
     VV_PARAMS(e32); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e64) { \
     VV_PARAMS(e64); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFFFFFFFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } \
   VI_LOOP_END
 
@@ -644,28 +677,28 @@ static inline bool is_overlapped_widen(const int astart, int asize,
       BODY; \
     } \
     else \
-      vd = 0xFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e16) { \
     VX_PARAMS(e16); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e32) { \
     VX_PARAMS(e32); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e64) { \
     VX_PARAMS(e64); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFFFFFFFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } \
   VI_LOOP_END 
 
@@ -678,28 +711,28 @@ static inline bool is_overlapped_widen(const int astart, int asize,
       BODY; \
     } \
     else \
-      vd = 0xFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e16) { \
     VI_PARAMS(e16); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e32) { \
     VI_PARAMS(e32); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e64) { \
     VI_PARAMS(e64); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFFFFFFFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } \
   VI_LOOP_END
 
@@ -722,21 +755,21 @@ static inline bool is_overlapped_widen(const int astart, int asize,
       BODY; \
     } \
     else \
-      *((type_sew_t<e16>::type *)&vd) = 0xFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (P.VU.vsew == e32) { \
     VFP_VF_PARAMS(32); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      *((type_sew_t<e32>::type *)&vd) = 0xFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (P.VU.vsew == e64) { \
     VFP_VF_PARAMS(64); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      *((type_sew_t<e64>::type *)&vd) = 0xFFFFFFFFFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } \
   VI_LOOP_END
 
@@ -757,7 +790,7 @@ static inline bool is_overlapped_widen(const int astart, int asize,
 #define REDUCTION_LOOP(x, BODY) \
   VI_LOOP_REDUCTION_BASE(x) \
   if(1 == P.VU.vta && i < (P.VU.VLEN/P.VU.vsew)) \
-    P.VU.elt<type_sew_t<x>::type>(rd_num, i, true) = ((type_sew_t<x>::type)~0); \
+    P.VU.elt<type_sew_t<x>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<x>::type>(rd_num, i, false)); \
   if(false == skip && i < vl) { \
     BODY; \
   } \
@@ -793,7 +826,7 @@ static inline bool is_overlapped_widen(const int astart, int asize,
 #define REDUCTION_ULOOP(x, BODY) \
   VI_ULOOP_REDUCTION_BASE(x) \
   if(1 == P.VU.vta && i < (P.VU.VLEN/P.VU.vsew)) \
-    P.VU.elt<type_sew_t<x>::type>(rd_num, i, true) = ((type_sew_t<x>::type)~0); \
+    P.VU.elt<type_sew_t<x>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<x>::type>(rd_num, i, false)); \
   if(false == skip && i < vl) { \
     BODY; \
   } \
@@ -829,28 +862,28 @@ static inline bool is_overlapped_widen(const int astart, int asize,
       BODY; \
     } \
     else \
-      vd = 0xFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e16) { \
     VV_U_PARAMS(e16); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e32) { \
     VV_U_PARAMS(e32); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e64) { \
     VV_U_PARAMS(e64); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFFFFFFFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } \
   VI_LOOP_END 
 
@@ -870,28 +903,28 @@ static inline bool is_overlapped_widen(const int astart, int asize,
 		BODY; \
 	} \
 	else \
-		vd = 0xFF; \
+		vd=vector_agnostic(vd); \
   } else if (sew == e16) { \
     VV_PARAMS(e16); \
 	if (1 == mata_action) { \
 		BODY; \
 	} \
 	else \
-		vd = 0xFFFF; \
+		vd=vector_agnostic(vd); \
   } else if (sew == e32) { \
     VV_PARAMS(e32); \
 	if (1 == mata_action) { \
 		BODY; \
 	} \
 	else \
-		vd = 0xFFFFFFFF; \
+		vd=vector_agnostic(vd); \
   } else if (sew == e64) { \
     VV_PARAMS(e64); \
 	if (1 == mata_action) { \
 		BODY; \
 	} \
 	else \
-		vd = 0xFFFFFFFFFFFFFFFF; \
+		vd=vector_agnostic(vd); \
   } \
   VI_LOOP_END 
 
@@ -929,28 +962,28 @@ static inline bool is_overlapped_widen(const int astart, int asize,
       BODY; \
     } \
     else \
-      vd = 0xFF; \
+      vd=vector_agnostic(vd); \
     } else if (sew == e16) { \
     VX_U_PARAMS(e16); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e32) { \
     VX_U_PARAMS(e32); \
     if (1 == mata_action) { \
         BODY; \
     } \
     else \
-      vd = 0xFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e64) { \
     VX_U_PARAMS(e64); \
     if (1 == mata_action) { \
         BODY; \
     } \
     else \
-      vd = 0xFFFFFFFFFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } \
   VI_LOOP_END 
 
@@ -970,28 +1003,28 @@ static inline bool is_overlapped_widen(const int astart, int asize,
       BODY; \
     } \
     else \
-      vd = 0xFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e16) { \
     VX_PARAMS(e16); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e32) { \
     VX_PARAMS(e32); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e64) { \
     VX_PARAMS(e64); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFFFFFFFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } \
   VI_LOOP_END 
 
@@ -1011,28 +1044,28 @@ static inline bool is_overlapped_widen(const int astart, int asize,
       BODY; \
     } \
     else \
-      vd = 0xFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e16) { \
     VI_U_PARAMS(e16); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e32) { \
     VI_U_PARAMS(e32); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e64) { \
     VI_U_PARAMS(e64); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFFFFFFFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } \
   VI_LOOP_END 
 
@@ -1052,28 +1085,28 @@ static inline bool is_overlapped_widen(const int astart, int asize,
       BODY; \
     } \
     else \
-      vd = 0xFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e16) { \
     VI_PARAMS(e16); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e32) { \
     VI_PARAMS(e32); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e64) { \
     VI_PARAMS(e64); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFFFFFFFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } \
   VI_LOOP_END 
 
@@ -1094,28 +1127,28 @@ static inline bool is_overlapped_widen(const int astart, int asize,
       BODY; \
     } \
     else \
-      vd = 0xFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e16) { \
     VV_SU_PARAMS(e16); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e32) { \
     VV_SU_PARAMS(e32); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e64) { \
     VV_SU_PARAMS(e64); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFFFFFFFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } \
   VI_LOOP_END 
 
@@ -1135,28 +1168,28 @@ static inline bool is_overlapped_widen(const int astart, int asize,
       BODY; \
     } \
     else \
-      vd = 0xFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e16) { \
     VX_SU_PARAMS(e16); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e32) { \
     VX_SU_PARAMS(e32); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e64) { \
     VX_SU_PARAMS(e64); \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFFFFFFFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } \
   VI_LOOP_END 
 
@@ -1176,19 +1209,19 @@ static inline bool is_overlapped_widen(const int astart, int asize,
     if (1 == mata_action) \
       {BODY;} \
     else \
-      vd = 0xFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e16) { \
     VV_NARROW_PARAMS(e16, e32) \
     if (1 == mata_action) \
       {BODY;} \
     else \
-      vd = 0xFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e32) { \
     VV_NARROW_PARAMS(e32, e64) \
     if (1 == mata_action) \
       {BODY;} \
     else \
-      vd = 0xFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } \
   VI_LOOP_END
 
@@ -1207,19 +1240,19 @@ static inline bool is_overlapped_widen(const int astart, int asize,
     if (1 == mata_action) \
       {BODY;} \
     else \
-      vd = 0xFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e16) { \
     VX_NARROW_PARAMS(e16, e32) \
     if (1 == mata_action) \
       {BODY;} \
     else \
-      vd = 0xFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e32) { \
     VX_NARROW_PARAMS(e32, e64) \
     if (1 == mata_action) \
       {BODY;} \
     else \
-      vd = 0xFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } \
   VI_LOOP_END
 
@@ -1238,19 +1271,19 @@ static inline bool is_overlapped_widen(const int astart, int asize,
     if (1 == mata_action) \
       {BODY;} \
     else \
-      vd = 0xFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e16) { \
     VI_NARROW_PARAMS(e16, e32) \
     if (1 == mata_action) \
       {BODY;} \
     else \
-      vd = 0xFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e32) { \
     VI_NARROW_PARAMS(e32, e64) \
     if (1 == mata_action) \
       {BODY;} \
     else \
-      vd = 0xFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } \
   VI_LOOP_END
 
@@ -1270,21 +1303,21 @@ static inline bool is_overlapped_widen(const int astart, int asize,
       BODY; \
     } \
     else \
-      vd = 0xFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e16) { \
     VI_NARROW_PARAMS(e16, e32) \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e32) { \
     VI_NARROW_PARAMS(e32, e64) \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } \
   VI_LOOP_END
 
@@ -1304,21 +1337,21 @@ static inline bool is_overlapped_widen(const int astart, int asize,
       BODY; \
     } \
     else \
-      vd = 0xFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e16) { \
     VX_NARROW_PARAMS(e16, e32) \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e32) { \
     VX_NARROW_PARAMS(e32, e64) \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } \
   VI_LOOP_END
 
@@ -1338,21 +1371,21 @@ static inline bool is_overlapped_widen(const int astart, int asize,
       BODY; \
     } \
     else \
-      vd = 0xFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e16) { \
     VV_NARROW_PARAMS(e16, e32) \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFF; \
+      vd=vector_agnostic(vd); \
   } else if (sew == e32) { \
     VV_NARROW_PARAMS(e32, e64) \
     if (1 == mata_action) { \
       BODY; \
     } \
     else \
-      vd = 0xFFFFFFFF; \
+      vd=vector_agnostic(vd); \
   } \
   VI_LOOP_END
 
@@ -1407,7 +1440,7 @@ static inline bool is_overlapped_widen(const int astart, int asize,
       P.VU.elt<uint16_t>(rd_num, i, true) = \
         op1((sign##16_t)(sign##8_t)var0 op0 (sign##16_t)(sign##8_t)var1) + var2; \
     else \
-      P.VU.elt<uint16_t>(rd_num, i, true) = 0xFFFF; \
+      P.VU.elt<uint16_t>(rd_num, i, true) = vector_agnostic(P.VU.elt<uint16_t>(rd_num, i, false)); \
     } \
     break; \
   case e16: { \
@@ -1416,7 +1449,7 @@ static inline bool is_overlapped_widen(const int astart, int asize,
       P.VU.elt<uint32_t>(rd_num, i, true) = \
         op1((sign##32_t)(sign##16_t)var0 op0 (sign##32_t)(sign##16_t)var1) + var2; \
     else \
-      P.VU.elt<uint32_t>(rd_num, i, true) = 0xFFFFFFFF; \
+      P.VU.elt<uint32_t>(rd_num, i, true) = vector_agnostic(P.VU.elt<uint32_t>(rd_num, i, false)); \
     } \
     break; \
   default: { \
@@ -1425,7 +1458,7 @@ static inline bool is_overlapped_widen(const int astart, int asize,
       P.VU.elt<uint64_t>(rd_num, i, true) = \
         op1((sign##64_t)(sign##32_t)var0 op0 (sign##64_t)(sign##32_t)var1) + var2; \
     else \
-      P.VU.elt<uint64_t>(rd_num, i, true) = 0xFFFFFFFFFFFFFFFF; \
+      P.VU.elt<uint64_t>(rd_num, i, true) = vector_agnostic(P.VU.elt<uint64_t>(rd_num, i, false)); \
     } \
     break; \
   }
@@ -1438,7 +1471,7 @@ static inline bool is_overlapped_widen(const int astart, int asize,
       P.VU.elt<uint16_t>(rd_num, i, true) = \
         op1((sign_1##16_t)(sign_1##8_t)var0 op0 (sign_2##16_t)(sign_2##8_t)var1) + var2; \
     else \
-      P.VU.elt<uint16_t>(rd_num, i, true) = 0xFFFF; \
+      P.VU.elt<uint16_t>(rd_num, i, true) = vector_agnostic(P.VU.elt<uint16_t>(rd_num, i, false)); \
     } \
     break; \
   case e16: { \
@@ -1447,7 +1480,7 @@ static inline bool is_overlapped_widen(const int astart, int asize,
       P.VU.elt<uint32_t>(rd_num, i, true) = \
         op1((sign_1##32_t)(sign_1##16_t)var0 op0 (sign_2##32_t)(sign_2##16_t)var1) + var2; \
     else \
-      P.VU.elt<uint32_t>(rd_num, i, true) = 0xFFFFFFFF; \
+      P.VU.elt<uint32_t>(rd_num, i, true) = vector_agnostic(P.VU.elt<uint32_t>(rd_num, i, false)); \
     } \
     break; \
   default: { \
@@ -1456,7 +1489,7 @@ static inline bool is_overlapped_widen(const int astart, int asize,
       P.VU.elt<uint64_t>(rd_num, i, true) = \
         op1((sign_1##64_t)(sign_1##32_t)var0 op0 (sign_2##64_t)(sign_2##32_t)var1) + var2; \
     else \
-      P.VU.elt<uint64_t>(rd_num, i, true) = 0xFFFFFFFFFFFFFFFF; \
+      P.VU.elt<uint64_t>(rd_num, i, true) = vector_agnostic(P.VU.elt<uint64_t>(rd_num, i, false)); \
     } \
     break; \
   }
@@ -1469,7 +1502,7 @@ static inline bool is_overlapped_widen(const int astart, int asize,
     if (1 == mata_action) \
       vd_w = vs2_w op0 (sign##16_t)(sign##8_t)var0; \
     else \
-      vd_w = 0xFFFF; \
+      vd_w = vector_agnostic(vd_w); \
     } \
     break; \
   case e16: { \
@@ -1478,7 +1511,7 @@ static inline bool is_overlapped_widen(const int astart, int asize,
     if (1 == mata_action) \
       vd_w = vs2_w op0 (sign##32_t)(sign##16_t)var0; \
     else \
-      vd_w = 0xFFFFFFFF; \
+      vd_w = vector_agnostic(vd_w); \
     } \
     break; \
   default: { \
@@ -1487,7 +1520,7 @@ static inline bool is_overlapped_widen(const int astart, int asize,
     if (1 == mata_action) \
       vd_w = vs2_w op0 (sign##64_t)(sign##32_t)var0; \
     else \
-      vd_w = 0xFFFFFFFFFFFFFFFF; \
+      vd_w = vector_agnostic(vd_w); \
     } \
     break; \
   }
@@ -1508,7 +1541,7 @@ static inline bool is_overlapped_widen(const int astart, int asize,
 #define WIDE_REDUCTION_LOOP(sew1, sew2, BODY) \
   VI_LOOP_WIDE_REDUCTION_BASE(sew1, sew2) \
   if(1 == P.VU.vta && i < (reg_t)(P.VU.VLEN/P.VU.vsew*(0.5))) \
-		P.VU.elt<type_sew_t<sew2>::type>(rd_num, i, true) = ((type_sew_t<sew2>::type)~0); \
+		P.VU.elt<type_sew_t<sew2>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<sew2>::type>(rd_num, i, false)); \
 	if(false == skip && i < vl) { \
     BODY; \
   } \
@@ -1541,7 +1574,7 @@ static inline bool is_overlapped_widen(const int astart, int asize,
 #define WIDE_REDUCTION_ULOOP(sew1, sew2, BODY) \
   VI_ULOOP_WIDE_REDUCTION_BASE(sew1, sew2) \
   if(1 == P.VU.vta && i < (reg_t)(P.VU.VLEN/P.VU.vsew*(0.5))) \
-		P.VU.elt<type_sew_t<sew2>::type>(rd_num, i, true) = ((type_sew_t<sew2>::type)~0); \
+		P.VU.elt<type_sew_t<sew2>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<sew2>::type>(rd_num, i, false)); \
 	if(false == skip && i < vl) { \
     BODY; \
   } \
@@ -1572,28 +1605,28 @@ static inline bool is_overlapped_widen(const int astart, int asize,
         BODY; \
       } \
       else \
-        res = 1; \
+        VECTOR_AGNOSTIC_RES_BIT; \
     } else if (sew == e16) { \
       if (1 == mata_action) { \
         VV_CARRY_PARAMS(e16) \
         BODY; \
       } \
       else \
-        res = 1; \
+        VECTOR_AGNOSTIC_RES_BIT; \
     } else if (sew == e32) { \
       if (1 == mata_action) { \
         VV_CARRY_PARAMS(e32) \
         BODY; \
       } \
       else \
-        res = 1; \
+        VECTOR_AGNOSTIC_RES_BIT; \
     } else if (sew == e64) { \
       if (1 == mata_action) { \
         VV_CARRY_PARAMS(e64) \
         BODY; \
       } \
       else \
-        res = 1; \
+        VECTOR_AGNOSTIC_RES_BIT; \
     } \
   VI_LOOP_CARRY_END
 
@@ -1610,28 +1643,28 @@ static inline bool is_overlapped_widen(const int astart, int asize,
         BODY; \
       } \
       else \
-        res = 1; \
+        VECTOR_AGNOSTIC_RES_BIT; \
     } else if (sew == e16) { \
       if (1 == mata_action) { \
         XI_CARRY_PARAMS(e16) \
         BODY; \
       } \
       else \
-        res = 1; \
+        VECTOR_AGNOSTIC_RES_BIT; \
     } else if (sew == e32) { \
       if (1 == mata_action) { \
         XI_CARRY_PARAMS(e32) \
         BODY; \
       } \
       else \
-        res = 1; \
+        VECTOR_AGNOSTIC_RES_BIT; \
     } else if (sew == e64) { \
       if (1 == mata_action) { \
         XI_CARRY_PARAMS(e64) \
         BODY; \
       } \
       else \
-        res = 1; \
+        VECTOR_AGNOSTIC_RES_BIT; \
     } \
   VI_LOOP_CARRY_END
 
@@ -1651,28 +1684,28 @@ static inline bool is_overlapped_widen(const int astart, int asize,
         BODY; \
       } \
       else \
-        vd = 0xFF; \
+        vd=vector_agnostic(vd); \
     } else if (sew == e16) { \
       VV_WITH_CARRY_PARAMS(e16) \
       if (1 == mata_action) { \
         BODY; \
       } \
       else \
-        vd = 0xFFFF; \
+        vd=vector_agnostic(vd); \
     } else if (sew == e32) { \
       VV_WITH_CARRY_PARAMS(e32) \
       if (1 == mata_action) { \
         BODY; \
       } \
       else \
-        vd = 0xFFFFFFFF; \
+        vd=vector_agnostic(vd); \
     } else if (sew == e64) { \
       VV_WITH_CARRY_PARAMS(e64) \
       if (1 == mata_action) { \
         BODY; \
       } \
       else \
-        vd = 0xFFFFFFFFFFFFFFFF; \
+        vd=vector_agnostic(vd); \
     } \
   VI_LOOP_END
 
@@ -1692,28 +1725,28 @@ static inline bool is_overlapped_widen(const int astart, int asize,
         BODY; \
       } \
       else \
-        vd = 0xFF; \
+        vd=vector_agnostic(vd); \
     } else if (sew == e16) { \
       XI_WITH_CARRY_PARAMS(e16) \
       if (1 == mata_action) { \
         BODY; \
       } \
       else \
-        vd = 0xFFFF; \
+        vd=vector_agnostic(vd); \
     } else if (sew == e32) { \
       XI_WITH_CARRY_PARAMS(e32) \
       if (1 == mata_action) { \
         BODY; \
       } \
       else \
-        vd = 0xFFFFFFFF; \
+        vd=vector_agnostic(vd); \
     } else if (sew == e64) { \
       XI_WITH_CARRY_PARAMS(e64) \
       if (1 == mata_action) { \
         BODY; \
       } \
       else \
-        vd = 0xFFFFFFFFFFFFFFFF; \
+        vd=vector_agnostic(vd); \
     } \
   VI_LOOP_END
 
@@ -2013,37 +2046,37 @@ reg_t index[P.VU.vlmax]; \
         if (1 == mata_action) \
           P.VU.elt<type##16_t>(rd_num, i, true) = P.VU.elt<type##8_t>(rs2_num, i); \
         else \
-          P.VU.elt<type##16_t>(rd_num, i, true) = 0xFFFF; \
+          P.VU.elt<type##16_t>(rd_num, i, true) = vector_agnostic(P.VU.elt<type##16_t>(rd_num, i, false)); \
         break; \
       case 0x41: \
         if (1 == mata_action) \
           P.VU.elt<type##32_t>(rd_num, i, true) = P.VU.elt<type##8_t>(rs2_num, i); \
         else \
-          P.VU.elt<type##32_t>(rd_num, i, true) = 0xFFFFFFFF; \
+          P.VU.elt<type##32_t>(rd_num, i, true) = vector_agnostic(P.VU.elt<type##32_t>(rd_num, i, false)); \
         break; \
       case 0x81: \
         if (1 == mata_action) \
           P.VU.elt<type##64_t>(rd_num, i, true) = P.VU.elt<type##8_t>(rs2_num, i); \
         else \
-          P.VU.elt<type##64_t>(rd_num, i, true) = 0xFFFFFFFFFFFFFFFF; \
+          P.VU.elt<type##64_t>(rd_num, i, true) = vector_agnostic(P.VU.elt<type##64_t>(rd_num, i, false)); \
         break; \
       case 0x42: \
         if (1 == mata_action) \
           P.VU.elt<type##32_t>(rd_num, i, true) = P.VU.elt<type##16_t>(rs2_num, i); \
         else \
-          P.VU.elt<type##32_t>(rd_num, i, true) = 0xFFFFFFFF; \
+          P.VU.elt<type##32_t>(rd_num, i, true) = vector_agnostic(P.VU.elt<type##32_t>(rd_num, i, false)); \
         break; \
       case 0x82: \
         if (1 == mata_action) \
           P.VU.elt<type##64_t>(rd_num, i, true) = P.VU.elt<type##16_t>(rs2_num, i); \
         else \
-          P.VU.elt<type##64_t>(rd_num, i, true) = 0xFFFFFFFFFFFFFFFF; \
+          P.VU.elt<type##64_t>(rd_num, i, true) = vector_agnostic(P.VU.elt<type##64_t>(rd_num, i, false)); \
         break; \
       case 0x84: \
         if (1 == mata_action) \
           P.VU.elt<type##64_t>(rd_num, i, true) = P.VU.elt<type##32_t>(rs2_num, i); \
         else \
-          P.VU.elt<type##64_t>(rd_num, i, true) = 0xFFFFFFFFFFFFFFFF; \
+          P.VU.elt<type##64_t>(rd_num, i, true) = vector_agnostic(P.VU.elt<type##64_t>(rd_num, i, false)); \
         break; \
       default: \
         break; \
@@ -2095,7 +2128,8 @@ reg_t index[P.VU.vlmax]; \
     VI_LOOP_ELEMENT_SKIP(); \
     uint64_t mmask = UINT64_C(1) << mpos; \
     uint64_t &vd = P.VU.elt<uint64_t>(rd_num, midx, true); \
-    uint64_t res = 0;
+    uint64_t res = 0; \
+    VECTOR_AGNOSTIC_BOUNDARY_CHK;
 
 #define VI_VFP_LOOP_REDUCTION_BASE(width) \
   float##width##_t vd_0 = P.VU.elt<float##width##_t>(rd_num, 0); \
@@ -2106,7 +2140,6 @@ reg_t index[P.VU.vlmax]; \
   for (reg_t i = P.VU.vstart->read(); i < std::max(P.VU.vlmax, P.VU.VLEN/P.VU.vsew); ++i) { \
     VI_LOOP_ELEMENT_SKIP_NO_VMA_CHECK(); \
     float##width##_t vs2 = P.VU.elt<float##width##_t>(rs2_num, i); \
-    is_active = true; \
 
 #define VI_VFP_LOOP_WIDE_REDUCTION_BASE \
   VI_VFP_COMMON \
@@ -2202,7 +2235,7 @@ reg_t index[P.VU.vlmax]; \
         set_fp_exceptions; \
       } \
       else \
-        *((type_sew_t<16>::type *)&vd) = 0xFFFF; \
+        *((type_sew_t<16>::type *)&vd) = vector_agnostic(*((type_sew_t<16>::type *)&vd)); \
       break; \
     } \
     case e32: { \
@@ -2212,7 +2245,7 @@ reg_t index[P.VU.vlmax]; \
         set_fp_exceptions; \
       } \
       else \
-        *((type_sew_t<32>::type *)&vd) = 0xFFFFFFFF; \
+        *((type_sew_t<32>::type *)&vd) = vector_agnostic(*((type_sew_t<32>::type *)&vd)); \
       break; \
     } \
     case e64: { \
@@ -2222,7 +2255,7 @@ reg_t index[P.VU.vlmax]; \
         set_fp_exceptions; \
       } \
       else \
-        *((type_sew_t<64>::type *)&vd) = 0xFFFFFFFFFFFFFFFF; \
+        *((type_sew_t<64>::type *)&vd) = vector_agnostic(*((type_sew_t<64>::type *)&vd)); \
       break; \
     } \
     default: \
@@ -2250,7 +2283,7 @@ reg_t index[P.VU.vlmax]; \
         set_fp_exceptions; \
       } \
       else \
-        *((type_sew_t<16>::type *)&vd) = 0xFFFF; \
+        *((type_sew_t<16>::type *)&vd) = vector_agnostic(*((type_sew_t<16>::type *)&vd)); \
       break; \
     } \
     case e32: { \
@@ -2260,7 +2293,7 @@ reg_t index[P.VU.vlmax]; \
         set_fp_exceptions; \
       } \
       else \
-        *((type_sew_t<32>::type *)&vd) = 0xFFFFFFFF; \
+        *((type_sew_t<32>::type *)&vd) = vector_agnostic(*((type_sew_t<32>::type *)&vd)); \
       break; \
     } \
     case e64: { \
@@ -2270,7 +2303,7 @@ reg_t index[P.VU.vlmax]; \
         set_fp_exceptions; \
       } \
       else \
-        *((type_sew_t<e64>::type *)&vd)  = 0xFFFFFFFFFFFFFFFF; \
+        *((type_sew_t<e64>::type *)&vd) = vector_agnostic(*((type_sew_t<e64>::type *)&vd)); \
       break; \
     } \
     default: \
@@ -2285,9 +2318,11 @@ reg_t index[P.VU.vlmax]; \
   switch (P.VU.vsew) { \
     case e16: { \
       VI_VFP_LOOP_REDUCTION_BASE(16) \
-        if(1 == P.VU.vta && i < (P.VU.VLEN/P.VU.vsew)) \
-          P.VU.elt<type_sew_t<16>::type>(rd_num, i, true) = ((type_sew_t<16>::type)~0); \
+        if(1 == P.VU.vta && i < (P.VU.VLEN/P.VU.vsew) && i > 0) { \
+          P.VU.elt<type_sew_t<16>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<16>::type>(rd_num, i, false)); \
+        } \
         if(false == skip && i < vl) { \
+          is_active = true; \
           BODY16; \
           set_fp_exceptions; \
         } \
@@ -2296,9 +2331,11 @@ reg_t index[P.VU.vlmax]; \
     } \
     case e32: { \
       VI_VFP_LOOP_REDUCTION_BASE(32) \
-        if(1 == P.VU.vta && i < (P.VU.VLEN/P.VU.vsew)) \
-          P.VU.elt<type_sew_t<32>::type>(rd_num, i, true) = ((type_sew_t<32>::type)~0); \
+        if(1 == P.VU.vta && i < (P.VU.VLEN/P.VU.vsew) && i > 0) { \
+          P.VU.elt<type_sew_t<32>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<32>::type>(rd_num, i, false)); \
+        } \
         if(false == skip && i < vl) { \
+          is_active = true; \
           BODY32; \
           set_fp_exceptions; \
         } \
@@ -2307,9 +2344,11 @@ reg_t index[P.VU.vlmax]; \
     } \
     case e64: { \
       VI_VFP_LOOP_REDUCTION_BASE(64) \
-        if(1 == P.VU.vta && i < (P.VU.VLEN/P.VU.vsew)) \
-          P.VU.elt<type_sew_t<64>::type>(rd_num, i, true) = ((type_sew_t<64>::type)~0); \
+        if(1 == P.VU.vta && i < (P.VU.VLEN/P.VU.vsew) && i > 0) { \
+          P.VU.elt<type_sew_t<64>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<64>::type>(rd_num, i, false)); \
+        } \
         if(false == skip && i < vl) { \
+          is_active = true; \
           BODY64; \
           set_fp_exceptions; \
         } \
@@ -2333,11 +2372,12 @@ reg_t index[P.VU.vlmax]; \
       V_EXT_VSTART_CHECK; \
       for (reg_t i = P.VU.vstart->read(); i < std::max(P.VU.vlmax, (reg_t)(P.VU.VLEN/P.VU.vsew*(0.5))); ++i) { \
         VI_LOOP_ELEMENT_SKIP_NO_VMA_CHECK(); \
-        is_active = true; \
-        float32_t vs2 = f16_to_f32(P.VU.elt<float16_t>(rs2_num, i)); \
-        if(1 == P.VU.vta && i < (reg_t)(P.VU.VLEN/P.VU.vsew*(0.5))) \
-          P.VU.elt<type_sew_t<e32>::type>(rd_num, i, true) = ((type_sew_t<e32>::type)~0); \
+        if(1 == P.VU.vta && i < (reg_t)(P.VU.VLEN/P.VU.vsew*(0.5)) && i > 0) { \
+          P.VU.elt<type_sew_t<e32>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<e32>::type>(rd_num, i, false)); \
+        } \
         if(false == skip && i < vl) { \
+          is_active = true; \
+          float32_t vs2 = f16_to_f32(P.VU.elt<float16_t>(rs2_num, i)); \
           BODY16; \
           set_fp_exceptions; \
         } \
@@ -2349,11 +2389,12 @@ reg_t index[P.VU.vlmax]; \
       V_EXT_VSTART_CHECK; \
       for (reg_t i = P.VU.vstart->read(); i < std::max(P.VU.vlmax, (reg_t)(P.VU.VLEN/P.VU.vsew*(0.5))); ++i) { \
         VI_LOOP_ELEMENT_SKIP_NO_VMA_CHECK(); \
-        is_active = true; \
-        float64_t vs2 = f32_to_f64(P.VU.elt<float32_t>(rs2_num, i)); \
-        if(1 == P.VU.vta && i < (reg_t)(P.VU.VLEN/P.VU.vsew*(0.5))) \
-          P.VU.elt<type_sew_t<e64>::type>(rd_num, i, true) = ((type_sew_t<e64>::type)~0); \
+        if(1 == P.VU.vta && i < (reg_t)(P.VU.VLEN/P.VU.vsew*(0.5)) && i > 0) { \
+          P.VU.elt<type_sew_t<e64>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<e64>::type>(rd_num, i, false)); \
+        } \
         if(false == skip && i < vl) { \
+          is_active = true; \
+          float64_t vs2 = f32_to_f64(P.VU.elt<float32_t>(rs2_num, i)); \
           BODY32; \
           set_fp_exceptions; \
         } \
@@ -2385,7 +2426,7 @@ reg_t index[P.VU.vlmax]; \
         set_fp_exceptions; \
       } \
       else { \
-        *((type_sew_t<16>::type *)&vd) = 0xFFFF; \
+        *((type_sew_t<16>::type *)&vd) = vector_agnostic(*((type_sew_t<16>::type *)&vd)); \
       } \
       break; \
     } \
@@ -2396,7 +2437,7 @@ reg_t index[P.VU.vlmax]; \
         set_fp_exceptions; \
       } \
       else { \
-        *((type_sew_t<32>::type *)&vd) = 0xFFFFFFFF; \
+        *((type_sew_t<32>::type *)&vd) = vector_agnostic(*((type_sew_t<32>::type *)&vd)); \
       } \
       break; \
     } \
@@ -2407,7 +2448,7 @@ reg_t index[P.VU.vlmax]; \
         set_fp_exceptions; \
       } \
       else { \
-        *((type_sew_t<64>::type *)&vd) = 0xFFFFFFFFFFFFFFFF; \
+        *((type_sew_t<64>::type *)&vd) = vector_agnostic(*((type_sew_t<64>::type *)&vd)); \
       } \
       break; \
     } \
@@ -2433,7 +2474,7 @@ reg_t index[P.VU.vlmax]; \
         set_fp_exceptions; \
       } \
       else \
-        res = 1; \
+        VECTOR_AGNOSTIC_RES_BIT; \
       break; \
     } \
     case e32: { \
@@ -2443,7 +2484,7 @@ reg_t index[P.VU.vlmax]; \
         set_fp_exceptions; \
       } \
       else \
-        res = 1; \
+        VECTOR_AGNOSTIC_RES_BIT; \
       break; \
     } \
     case e64: { \
@@ -2453,7 +2494,7 @@ reg_t index[P.VU.vlmax]; \
         set_fp_exceptions; \
       } \
       else \
-        res = 1; \
+        VECTOR_AGNOSTIC_RES_BIT; \
       break; \
     } \
     default: \
@@ -2477,7 +2518,7 @@ reg_t index[P.VU.vlmax]; \
         set_fp_exceptions; \
       } \
       else \
-        res = 1; \
+        VECTOR_AGNOSTIC_RES_BIT; \
       break; \
     } \
     case e32: { \
@@ -2487,7 +2528,7 @@ reg_t index[P.VU.vlmax]; \
         set_fp_exceptions; \
       } \
       else \
-        res = 1; \
+        VECTOR_AGNOSTIC_RES_BIT; \
       break; \
     } \
     case e64: { \
@@ -2497,7 +2538,7 @@ reg_t index[P.VU.vlmax]; \
         set_fp_exceptions; \
       } \
       else \
-        res = 1; \
+        VECTOR_AGNOSTIC_RES_BIT; \
       break; \
     } \
     default: \
@@ -2525,7 +2566,7 @@ reg_t index[P.VU.vlmax]; \
         BODY16; \
         set_fp_exceptions; \
       } else \
-        P.VU.elt<uint32_t>(rd_num, i, true) = 0xFFFFFFFF; \
+        P.VU.elt<uint32_t>(rd_num, i, true) = vector_agnostic(P.VU.elt<uint32_t>(rd_num, i, false)); \
       break; \
     } \
     case e32: { \
@@ -2536,7 +2577,7 @@ reg_t index[P.VU.vlmax]; \
         BODY32; \
         set_fp_exceptions; \
       } else \
-        P.VU.elt<uint64_t>(rd_num, i, true) = 0xFFFFFFFFFFFFFFFF; \
+        P.VU.elt<uint64_t>(rd_num, i, true) = vector_agnostic(P.VU.elt<uint64_t>(rd_num, i, false)); \
       break; \
     } \
     default: \
@@ -2578,24 +2619,24 @@ reg_t index[P.VU.vlmax]; \
   switch (P.VU.vsew) { \
     case e16: { \
       float32_t &vd = P.VU.elt<float32_t>(rd_num, i, true); \
-      float32_t vs2 = f16_to_f32(P.VU.elt<float16_t>(rs2_num, i)); \
-      float32_t vs1 = f16_to_f32(P.VU.elt<float16_t>(rs1_num, i)); \
       if (1 == mata_action) { \
+        float32_t vs2 = f16_to_f32(P.VU.elt<float16_t>(rs2_num, i)); \
+        float32_t vs1 = f16_to_f32(P.VU.elt<float16_t>(rs1_num, i)); \
         BODY16; \
         set_fp_exceptions; \
       } else \
-        P.VU.elt<uint32_t>(rd_num, i, true) = 0xFFFFFFFF; \
+        P.VU.elt<uint32_t>(rd_num, i, true) = vector_agnostic(P.VU.elt<uint32_t>(rd_num, i, false)); \
       break; \
     } \
     case e32: { \
       float64_t &vd = P.VU.elt<float64_t>(rd_num, i, true); \
-      float64_t vs2 = f32_to_f64(P.VU.elt<float32_t>(rs2_num, i)); \
-      float64_t vs1 = f32_to_f64(P.VU.elt<float32_t>(rs1_num, i)); \
       if (1 == mata_action) { \
+        float64_t vs2 = f32_to_f64(P.VU.elt<float32_t>(rs2_num, i)); \
+        float64_t vs1 = f32_to_f64(P.VU.elt<float32_t>(rs1_num, i)); \
         BODY32; \
         set_fp_exceptions; \
       } else \
-        P.VU.elt<uint64_t>(rd_num, i, true) = 0xFFFFFFFFFFFFFFFF; \
+        P.VU.elt<uint64_t>(rd_num, i, true) = vector_agnostic(P.VU.elt<uint64_t>(rd_num, i, false)); \
       break; \
     } \
     default: \
@@ -2644,7 +2685,7 @@ reg_t index[P.VU.vlmax]; \
         set_fp_exceptions; \
       } \
       else \
-        *((type_sew_t<32>::type *)&vd) = 0xFFFFFFFF; \
+        *((type_sew_t<32>::type *)&vd) = vector_agnostic(*((type_sew_t<32>::type *)&vd)); \
       break; \
     } \
     case e32: { \
@@ -2656,7 +2697,7 @@ reg_t index[P.VU.vlmax]; \
         set_fp_exceptions; \
       } \
       else \
-        *((type_sew_t<64>::type *)&vd) = 0xFFFFFFFFFFFFFFFF; \
+        *((type_sew_t<64>::type *)&vd) = vector_agnostic(*((type_sew_t<64>::type *)&vd)); \
       break; \
     } \
     default: \
@@ -2679,25 +2720,25 @@ reg_t index[P.VU.vlmax]; \
     case e16: { \
       float32_t &vd = P.VU.elt<float32_t>(rd_num, i, true); \
       float32_t vs2 = P.VU.elt<float32_t>(rs2_num, i); \
-      float32_t vs1 = f16_to_f32(P.VU.elt<float16_t>(rs1_num, i)); \
       if (1 == mata_action) { \
+        float32_t vs1 = f16_to_f32(P.VU.elt<float16_t>(rs1_num, i)); \
         BODY16; \
         set_fp_exceptions; \
       } \
       else \
-        *((type_sew_t<32>::type *)&vd) = 0xFFFFFFFF; \
+        *((type_sew_t<32>::type *)&vd) = vector_agnostic(*((type_sew_t<32>::type *)&vd)); \
       break; \
     } \
     case e32: { \
       float64_t &vd = P.VU.elt<float64_t>(rd_num, i, true); \
       float64_t vs2 = P.VU.elt<float64_t>(rs2_num, i); \
-      float64_t vs1 = f32_to_f64(P.VU.elt<float32_t>(rs1_num, i)); \
       if (1 == mata_action) { \
+        float64_t vs1 = f32_to_f64(P.VU.elt<float32_t>(rs1_num, i)); \
         BODY32; \
         set_fp_exceptions; \
       } \
       else \
-        *((type_sew_t<64>::type *)&vd) = 0xFFFFFFFFFFFFFFFF; \
+        *((type_sew_t<64>::type *)&vd) = vector_agnostic(*((type_sew_t<64>::type *)&vd)); \
       break; \
     } \
     default: \
@@ -2735,7 +2776,7 @@ reg_t index[P.VU.vlmax]; \
     set_fp_exceptions; \
   } \
   else \
-    vd=setAllBitsToOne(vd); \
+    vd=vector_agnostic(vd); \
   VI_VFP_LOOP_END
 
 #define VI_VFP_CVT_INT_TO_FP(BODY16, BODY32, BODY64, sign) \
