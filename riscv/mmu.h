@@ -20,7 +20,7 @@
 const reg_t PGSIZE = 1 << PGSHIFT;
 const reg_t PGMASK = ~(PGSIZE-1);
 #if defined(CPU_ROCKET_CHIP) || defined(CPU_NUTSHELL)
-#define MAX_PADDR_BITS 32
+#define MAX_PADDR_BITS 36
 #elif defined(CPU_XIANGSHAN)
 #define MAX_PADDR_BITS 36
 #else
@@ -100,7 +100,10 @@ public:
   ~mmu_t();
 
   template<typename T>
-  T ALWAYS_INLINE load(reg_t addr, xlate_flags_t xlate_flags = {false, false, false}) {
+  T ALWAYS_INLINE load(reg_t addr, xlate_flags_t xlate_flags = { false, false, false }) {
+    if (addr >= 0x38000000 && addr <= 0x38010000) {
+      return 0;
+    }
     target_endian<T> res;
     reg_t vpn = addr >> PGSHIFT;
     bool aligned = (addr & (sizeof(T) - 1)) == 0;
@@ -145,7 +148,10 @@ public:
   }
 
   template<typename T>
-  void ALWAYS_INLINE store(reg_t addr, T val, xlate_flags_t xlate_flags = {false, false, false}) {
+  void ALWAYS_INLINE store(reg_t addr, T val, xlate_flags_t xlate_flags = { false, false, false }) {
+    if (addr >= 0x38000000 && addr <= 0x38010000) {
+      return;
+    }
     reg_t vpn = addr >> PGSHIFT;
     bool aligned = (addr & (sizeof(T) - 1)) == 0;
     bool tlb_hit = tlb_store_tag[vpn % TLB_ENTRIES] == vpn;
@@ -390,6 +396,10 @@ public:
   void set_cache_blocksz(reg_t size)
   {
     blocksz = size;
+  }
+
+  void set_load_reservation_address(reg_t val) {
+    this->load_reservation_address = val;
   }
 
 private:

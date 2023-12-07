@@ -82,9 +82,9 @@ public:
   bool debug_difftest = false;
 };
 
-class DifftestUarchStatus {
-public:
-  uint64_t sc_failed = 0;
+typedef struct DifftestUarchStatus {
+  uint64_t lrscValid;
+  uint64_t lrscAddr;
 };
 
 class DifftestRef {
@@ -108,8 +108,12 @@ public:
     sim->enable_difftest_logs = c->debug_difftest;
   }
   void update_uarch_status(void *status) {
-    auto s = (DifftestUarchStatus *)status;
-    if (s->sc_failed) {
+    auto s = (DifftestUarchStatus*)status;
+    p->get_mmu()->set_load_reservation_address(s->lrscAddr);
+    if (s->lrscValid) {
+      sim->sc_failed = false;
+    }
+    else {
       sim->sc_failed = true;
     }
   }

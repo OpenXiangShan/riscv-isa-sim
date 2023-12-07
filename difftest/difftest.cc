@@ -332,6 +332,16 @@ void DifftestRef::display() {
     if (i % 2 == 1) printf("\n");
     else printf(" | ");
   }
+  //vector register
+  auto& vstate = p->VU;
+  for (i = 0; i < 32; i ++) {
+    printf("v%02d: ", i);
+    printf("0x%016lx_%016lx  ",
+           vstate.elt<uint64_t>(i, 1, false), vstate.elt<uint64_t>(i, 0, false));
+    if (i % 2) printf("\n");
+  }
+  printf("vtype: " FMT_WORD " vstart: " FMT_WORD " vxsat: " FMT_WORD "\n", vstate.vtype->read(), vstate.vstart->read(), vstate.vxsat->read());
+  printf("vxrm: " FMT_WORD " vl: " FMT_WORD " vcsr: " FMT_WORD "\n", vstate.vxrm->read(), vstate.vl->read(), state->csrmap[CSR_VCSR]->read());
   fflush(stdout);
 }
 
@@ -435,9 +445,9 @@ void difftest_memcpy(uint64_t addr, void *buf, size_t n, bool direction) {
   }
 }
 
-void difftest_regcpy(diff_context_t* dut, bool direction, bool on_demand) {
+void difftest_regcpy(diff_context_t* dut, bool direction) {
   if (direction == DIFFTEST_TO_REF) {
-    ref->set_regs(dut, on_demand);
+    ref->set_regs(dut, false);
   } else {
     ref->get_regs(dut);
   }

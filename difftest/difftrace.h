@@ -127,15 +127,15 @@ public:
   bool sc_failed = false;
 
   void difftest_log(const char *__restrict __fmt, ...) {
-    if (unlikely(enable_difftest_logs)) {
-      va_list args;
-      va_start(args, __fmt);
-      fprintf(stderr, "[Spike] ");
-      vfprintf(stderr, __fmt, args);
-      fprintf(stderr, "\n");
-      fflush(stderr);
-      va_end(args);
-    }
+    // if (unlikely(enable_difftest_logs)) {
+    //   va_list args;
+    //   va_start(args, __fmt);
+    //   fprintf(stderr, "[Spike] ");
+    //   vfprintf(stderr, __fmt, args);
+    //   fprintf(stderr, "\n");
+    //   fflush(stderr);
+    //   va_end(args);
+    // }
   }
 
 #define __DIFFTEST_LOG_INTERFACE(name, type)                                      \
