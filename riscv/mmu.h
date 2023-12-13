@@ -27,6 +27,8 @@ const reg_t PGMASK = ~(PGSIZE-1);
 #define MAX_PADDR_BITS 56 // imposed by Sv39 / Sv48
 #endif
 
+#define IS_MMIO(addr) ((addr >= 0x38000000) && (addr <= 0x38010000)) || ((addr >= 0x40600000) && (addr <= 0x4060000d))
+
 struct insn_fetch_t
 {
   insn_func_t func;
@@ -101,7 +103,7 @@ public:
 
   template<typename T>
   T ALWAYS_INLINE load(reg_t addr, xlate_flags_t xlate_flags = { false, false, false }) {
-    if (addr >= 0x38000000 && addr <= 0x38010000) {
+    if (IS_MMIO(addr)) {
       return 0;
     }
     target_endian<T> res;
@@ -149,7 +151,7 @@ public:
 
   template<typename T>
   void ALWAYS_INLINE store(reg_t addr, T val, xlate_flags_t xlate_flags = { false, false, false }) {
-    if (addr >= 0x38000000 && addr <= 0x38010000) {
+    if (IS_MMIO(addr)) {
       return;
     }
     reg_t vpn = addr >> PGSHIFT;
