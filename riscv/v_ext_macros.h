@@ -71,6 +71,16 @@ T vector_agnostic(T value) {
     VI_LOOP_ELEMENT_SKIP(); \
   }
 
+#define VI_ELEMENT_SKIP_NO_VMA_CHECK \
+  if (i >= vl) { \
+    continue; \
+  } else if (i < P.VU.vstart->read()) { \
+    continue; \
+  } else { \
+    VI_LOOP_ELEMENT_SKIP_NO_VMA_CHECK(); \
+    if(skip) continue;\
+  }
+
 //
 // vector: operation and register acccess check helper
 //
@@ -1878,7 +1888,7 @@ reg_t index[P.VU.vlmax]; \
   const reg_t vs3 = insn.rd(); \
   for (reg_t i = 0; i < vl; ++i) { \
     VI_STRIP(i) \
-    VI_ELEMENT_SKIP; \
+    VI_ELEMENT_SKIP_NO_VMA_CHECK; \
     P.VU.vstart->write(i); \
     for (reg_t fn = 0; fn < nf; ++fn) { \
       elt_width##_t val = P.VU.elt<elt_width##_t>(vs3 + fn * emul, vreg_inx); \
@@ -1899,7 +1909,7 @@ reg_t index[P.VU.vlmax]; \
   VI_DUPLICATE_VREG(insn.rs2(), elt_width); \
   for (reg_t i = 0; i < vl; ++i) { \
     VI_STRIP(i) \
-    VI_ELEMENT_SKIP; \
+    VI_ELEMENT_SKIP_NO_VMA_CHECK; \
     P.VU.vstart->write(i); \
     for (reg_t fn = 0; fn < nf; ++fn) { \
       switch (P.VU.vsew) { \
