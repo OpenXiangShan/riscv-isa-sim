@@ -105,7 +105,7 @@ void DifftestRef::get_regs(diff_context_t *ctx) {
     ctx->vr[i]._64[1] = vReg_Val1;
   }
   /***************************************************************************************************/
-  ctx->vstart     = vstate.vstart->read();
+  ctx->vstart     = 0;//vstate.vstart->read();
   ctx->vxsat      = vstate.vxsat->read();
   ctx->vxrm       = vstate.vxrm->read();
   ctx->vcsr       = state->csrmap[CSR_VCSR]->read();
@@ -153,7 +153,8 @@ void DifftestRef::set_regs(diff_context_t *ctx, bool on_demand) {
     state->satp->write(ctx->satp);
   }
   if (!on_demand || state->mip->read() != ctx->mip) {
-    state->mip->write(ctx->mip);
+    //state->mip->write(ctx->mip);
+    //printf("not cp mip\n");
   }
   if (!on_demand || state->mie->read() != ctx->mie) {
     state->mie->write(ctx->mie);
