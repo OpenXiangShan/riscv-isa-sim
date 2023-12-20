@@ -789,12 +789,14 @@ static inline bool is_overlapped_widen(const int astart, int asize,
 
 #define REDUCTION_LOOP(x, BODY) \
   VI_LOOP_REDUCTION_BASE(x) \
-  if(1 == P.VU.vta && i < (P.VU.VLEN/P.VU.vsew)) \
-    P.VU.elt<type_sew_t<x>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<x>::type>(rd_num, i, false)); \
   if(false == skip && i < vl) { \
     BODY; \
   } \
-  VI_LOOP_REDUCTION_END(x)
+  VI_LOOP_REDUCTION_END(x) \
+  for (reg_t i = 1; i < (P.VU.VLEN/P.VU.vsew); ++i) { \
+    if(1 == P.VU.vta) \
+      P.VU.elt<type_sew_t<x>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<x>::type>(rd_num, i, false)); \
+  }
 
 #define VI_VV_LOOP_REDUCTION(BODY) \
   VI_CHECK_REDUCTION(false); \
@@ -825,12 +827,14 @@ static inline bool is_overlapped_widen(const int astart, int asize,
 
 #define REDUCTION_ULOOP(x, BODY) \
   VI_ULOOP_REDUCTION_BASE(x) \
-  if(1 == P.VU.vta && i < (P.VU.VLEN/P.VU.vsew)) \
-    P.VU.elt<type_sew_t<x>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<x>::type>(rd_num, i, false)); \
   if(false == skip && i < vl) { \
     BODY; \
   } \
-  VI_LOOP_REDUCTION_END(x)
+  VI_LOOP_REDUCTION_END(x) \
+  for (reg_t i = 1; i < (P.VU.VLEN/P.VU.vsew); ++i) { \
+    if(1 == P.VU.vta) \
+      P.VU.elt<type_sew_t<x>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<x>::type>(rd_num, i, false)); \
+  }
 
 #define VI_VV_ULOOP_REDUCTION(BODY) \
   VI_CHECK_REDUCTION(false); \
@@ -1540,12 +1544,14 @@ static inline bool is_overlapped_widen(const int astart, int asize,
 
 #define WIDE_REDUCTION_LOOP(sew1, sew2, BODY) \
   VI_LOOP_WIDE_REDUCTION_BASE(sew1, sew2) \
-  if(1 == P.VU.vta && i < (reg_t)(P.VU.VLEN/P.VU.vsew*(0.5))) \
-		P.VU.elt<type_sew_t<sew2>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<sew2>::type>(rd_num, i, false)); \
 	if(false == skip && i < vl) { \
     BODY; \
   } \
-  VI_LOOP_REDUCTION_END(sew2)
+  VI_LOOP_REDUCTION_END(sew2) \
+  for (reg_t i = 1; i < (reg_t)(P.VU.VLEN/P.VU.vsew*(0.5)); ++i) { \
+    if(1 == P.VU.vta) \
+		P.VU.elt<type_sew_t<sew2>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<sew2>::type>(rd_num, i, false)); \
+  }
 
 #define VI_VV_LOOP_WIDE_REDUCTION(BODY) \
   VI_CHECK_REDUCTION(true); \
@@ -1573,12 +1579,14 @@ static inline bool is_overlapped_widen(const int astart, int asize,
 
 #define WIDE_REDUCTION_ULOOP(sew1, sew2, BODY) \
   VI_ULOOP_WIDE_REDUCTION_BASE(sew1, sew2) \
-  if(1 == P.VU.vta && i < (reg_t)(P.VU.VLEN/P.VU.vsew*(0.5))) \
-		P.VU.elt<type_sew_t<sew2>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<sew2>::type>(rd_num, i, false)); \
 	if(false == skip && i < vl) { \
     BODY; \
   } \
-  VI_LOOP_REDUCTION_END(sew2)
+  VI_LOOP_REDUCTION_END(sew2) \
+  for (reg_t i = 1; i < (reg_t)(P.VU.VLEN/P.VU.vsew*(0.5)); ++i) { \
+    if(1 == P.VU.vta) \
+      P.VU.elt<type_sew_t<sew2>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<sew2>::type>(rd_num, i, false)); \
+  }
 
 #define VI_VV_ULOOP_WIDE_REDUCTION(BODY) \
   VI_CHECK_REDUCTION(true); \
@@ -2318,41 +2326,47 @@ reg_t index[P.VU.vlmax]; \
   switch (P.VU.vsew) { \
     case e16: { \
       VI_VFP_LOOP_REDUCTION_BASE(16) \
-        if(1 == P.VU.vta && i < (P.VU.VLEN/P.VU.vsew) && i > 0) { \
-          P.VU.elt<type_sew_t<16>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<16>::type>(rd_num, i, false)); \
-        } \
         if(false == skip && i < vl) { \
           is_active = true; \
           BODY16; \
           set_fp_exceptions; \
         } \
       VI_VFP_LOOP_REDUCTION_END(e16) \
+      for (reg_t i = 1; i < (P.VU.VLEN/P.VU.vsew); ++i) { \
+        if(1 == P.VU.vta) { \
+          P.VU.elt<type_sew_t<16>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<16>::type>(rd_num, i, false)); \
+        } \
+      } \
       break; \
     } \
     case e32: { \
       VI_VFP_LOOP_REDUCTION_BASE(32) \
-        if(1 == P.VU.vta && i < (P.VU.VLEN/P.VU.vsew) && i > 0) { \
-          P.VU.elt<type_sew_t<32>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<32>::type>(rd_num, i, false)); \
-        } \
         if(false == skip && i < vl) { \
           is_active = true; \
           BODY32; \
           set_fp_exceptions; \
         } \
       VI_VFP_LOOP_REDUCTION_END(e32) \
+      for (reg_t i = 1; i < (P.VU.VLEN/P.VU.vsew); ++i) { \
+        if(1 == P.VU.vta) { \
+          P.VU.elt<type_sew_t<32>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<32>::type>(rd_num, i, false)); \
+        } \
+      } \
       break; \
     } \
     case e64: { \
       VI_VFP_LOOP_REDUCTION_BASE(64) \
-        if(1 == P.VU.vta && i < (P.VU.VLEN/P.VU.vsew) && i > 0) { \
-          P.VU.elt<type_sew_t<64>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<64>::type>(rd_num, i, false)); \
-        } \
         if(false == skip && i < vl) { \
           is_active = true; \
           BODY64; \
           set_fp_exceptions; \
         } \
       VI_VFP_LOOP_REDUCTION_END(e64) \
+      for (reg_t i = 1; i < (P.VU.VLEN/P.VU.vsew); ++i) { \
+        if(1 == P.VU.vta) { \
+          P.VU.elt<type_sew_t<64>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<64>::type>(rd_num, i, false)); \
+        } \
+      } \
       break; \
     } \
     default: \
@@ -2372,9 +2386,6 @@ reg_t index[P.VU.vlmax]; \
       V_EXT_VSTART_CHECK; \
       for (reg_t i = P.VU.vstart->read(); i < std::max(P.VU.vlmax, (reg_t)(P.VU.VLEN/P.VU.vsew*(0.5))); ++i) { \
         VI_LOOP_ELEMENT_SKIP_NO_VMA_CHECK(); \
-        if(1 == P.VU.vta && i < (reg_t)(P.VU.VLEN/P.VU.vsew*(0.5)) && i > 0) { \
-          P.VU.elt<type_sew_t<e32>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<e32>::type>(rd_num, i, false)); \
-        } \
         if(false == skip && i < vl) { \
           is_active = true; \
           float32_t vs2 = f16_to_f32(P.VU.elt<float16_t>(rs2_num, i)); \
@@ -2382,6 +2393,11 @@ reg_t index[P.VU.vlmax]; \
           set_fp_exceptions; \
         } \
       VI_VFP_LOOP_REDUCTION_END(e32) \
+      for (reg_t i = 1; i < (reg_t)(P.VU.VLEN/P.VU.vsew*(0.5)); ++i) { \
+        if(1 == P.VU.vta) { \
+          P.VU.elt<type_sew_t<e32>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<e32>::type>(rd_num, i, false)); \
+        } \
+      } \
       break; \
     } \
     case e32: { \
@@ -2389,9 +2405,6 @@ reg_t index[P.VU.vlmax]; \
       V_EXT_VSTART_CHECK; \
       for (reg_t i = P.VU.vstart->read(); i < std::max(P.VU.vlmax, (reg_t)(P.VU.VLEN/P.VU.vsew*(0.5))); ++i) { \
         VI_LOOP_ELEMENT_SKIP_NO_VMA_CHECK(); \
-        if(1 == P.VU.vta && i < (reg_t)(P.VU.VLEN/P.VU.vsew*(0.5)) && i > 0) { \
-          P.VU.elt<type_sew_t<e64>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<e64>::type>(rd_num, i, false)); \
-        } \
         if(false == skip && i < vl) { \
           is_active = true; \
           float64_t vs2 = f32_to_f64(P.VU.elt<float32_t>(rs2_num, i)); \
@@ -2399,6 +2412,11 @@ reg_t index[P.VU.vlmax]; \
           set_fp_exceptions; \
         } \
       VI_VFP_LOOP_REDUCTION_END(e64) \
+      for (reg_t i = 1; i < ((reg_t)(P.VU.VLEN/P.VU.vsew*(0.5))); ++i) { \
+        if(1 == P.VU.vta) { \
+          P.VU.elt<type_sew_t<e64>::type>(rd_num, i, true) = vector_agnostic(P.VU.elt<type_sew_t<e64>::type>(rd_num, i, false)); \
+        } \
+      } \
       break; \
     } \
     default: \
