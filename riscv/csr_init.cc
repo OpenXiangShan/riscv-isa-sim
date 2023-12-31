@@ -29,7 +29,7 @@ void state_t::csr_init(processor_t* const proc, reg_t max_isa)
   }
   add_csr(CSR_MEPC, mepc = std::make_shared<epc_csr_t>(proc, CSR_MEPC));
   add_csr(CSR_MTVAL, mtval = std::make_shared<basic_csr_t>(proc, CSR_MTVAL, 0));
-  add_csr(CSR_MSCRATCH, std::make_shared<basic_csr_t>(proc, CSR_MSCRATCH, 0));
+  add_csr(CSR_MSCRATCH, mscratch = std::make_shared<basic_csr_t>(proc, CSR_MSCRATCH, 0));
   add_csr(CSR_MTVEC, mtvec = std::make_shared<tvec_csr_t>(proc, CSR_MTVEC));
   add_csr(CSR_MCAUSE, mcause = std::make_shared<cause_csr_t>(proc, CSR_MCAUSE));
 
@@ -141,6 +141,7 @@ void state_t::csr_init(processor_t* const proc, reg_t max_isa)
 #else
   const reg_t counteren_mask = (proc->extension_enabled_const(EXT_ZICNTR) ? 0x7UL : 0x0) | (proc->extension_enabled_const(EXT_ZIHPM) ? 0xfffffff8ULL : 0x0);
 #endif
+// Note: if max_isa does not include H, we don't really need this virtualized_csr_t at all (though it doesn't hurt):
   add_user_csr(CSR_MCOUNTEREN, mcounteren = std::make_shared<masked_csr_t>(proc, CSR_MCOUNTEREN, counteren_mask, 0));
   add_supervisor_csr(CSR_SCOUNTEREN, scounteren = std::make_shared<masked_csr_t>(proc, CSR_SCOUNTEREN, counteren_mask, 0));
   nonvirtual_sepc = std::make_shared<epc_csr_t>(proc, CSR_SEPC);
@@ -149,15 +150,13 @@ void state_t::csr_init(processor_t* const proc, reg_t max_isa)
   nonvirtual_stval = std::make_shared<basic_csr_t>(proc, CSR_STVAL, 0);
   add_hypervisor_csr(CSR_VSTVAL, vstval = std::make_shared<basic_csr_t>(proc, CSR_VSTVAL, 0));
   add_supervisor_csr(CSR_STVAL, stval = std::make_shared<virtualized_csr_t>(proc, nonvirtual_stval, vstval));
-  auto sscratch = std::make_shared<basic_csr_t>(proc, CSR_SSCRATCH, 0);
-  auto vsscratch = std::make_shared<basic_csr_t>(proc, CSR_VSSCRATCH, 0);
-  // Note: if max_isa does not include H, we don't really need this virtualized_csr_t at all (though it doesn't hurt):
-  add_supervisor_csr(CSR_SSCRATCH, std::make_shared<virtualized_csr_t>(proc, sscratch, vsscratch));
-  add_hypervisor_csr(CSR_VSSCRATCH, vsscratch);
+  nonvirtual_sscratch = std::make_shared<basic_csr_t>(proc, CSR_SSCRATCH, 0);
+  add_supervisor_csr(CSR_SSCRATCH, sscratch = std::make_shared<virtualized_csr_t>(proc, sscratch, vsscratch));
+  add_hypervisor_csr(CSR_VSSCRATCH, vsscratch = std::make_shared<basic_csr_t>(proc, CSR_VSSCRATCH, 0));
   nonvirtual_stvec = std::make_shared<tvec_csr_t>(proc, CSR_STVEC);
   add_hypervisor_csr(CSR_VSTVEC, vstvec = std::make_shared<tvec_csr_t>(proc, CSR_VSTVEC));
   add_supervisor_csr(CSR_STVEC, stvec = std::make_shared<virtualized_csr_t>(proc, nonvirtual_stvec, vstvec));
-  auto nonvirtual_satp = std::make_shared<satp_csr_t>(proc, CSR_SATP);
+  nonvirtual_satp = std::make_shared<satp_csr_t>(proc, CSR_SATP);
   add_hypervisor_csr(CSR_VSATP, vsatp = std::make_shared<base_atp_csr_t>(proc, CSR_VSATP));
   add_supervisor_csr(CSR_SATP, satp = std::make_shared<virtualized_satp_csr_t>(proc, nonvirtual_satp, vsatp));
   nonvirtual_scause = std::make_shared<cause_csr_t>(proc, CSR_SCAUSE);
