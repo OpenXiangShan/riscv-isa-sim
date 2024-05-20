@@ -700,7 +700,7 @@ misa_csr_t::misa_csr_t(processor_t* const proc, const reg_t addr, const reg_t ma
   basic_csr_t(proc, addr, max_isa),
   max_isa(max_isa),
 #if defined(CPU_ROCKET_CHIP)
-  write_mask(max_isa & (0  // allow MAFDQCHV bits in MISA to be modified
+  write_mask(max_isa & (0  // allow MAFDCV bits in MISA to be modified
                         | (1L << ('M' - 'A'))
                         | (1L << ('A' - 'A'))
                         | (1L << ('F' - 'A'))
@@ -711,7 +711,7 @@ misa_csr_t::misa_csr_t(processor_t* const proc, const reg_t addr, const reg_t ma
 #elif defined(CPU_NUTSHELL) || defined (CPU_XIANGSHAN)
   write_mask(0 // not allowed
 #else
-  write_mask(max_isa & (0  // allow MAFDQCHV bits in MISA to be modified
+  write_mask(max_isa & (0  // allow MABFDQCHV bits in MISA to be modified
                         | (1L << ('M' - 'A'))
                         | (1L << ('A' - 'A'))
                         | (1L << ('B' - 'A'))

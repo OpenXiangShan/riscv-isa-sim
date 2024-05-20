@@ -284,7 +284,7 @@ public:
       return index(load_reservation_address) == index(paddr);
 #else
       return load_reservation_address == paddr;
-#endif
+#endif // DIFFTEST
     }
     else
       throw trap_store_access_fault((proc) ? proc->state.v : false, vaddr, 0, 0);

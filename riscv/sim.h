@@ -97,7 +97,6 @@ private:
 public:
 #endif
   void step(size_t n); // step through simulation
-#endif // SPIKE_FUZZ
   size_t current_step;
   size_t current_proc;
   bool debug;
