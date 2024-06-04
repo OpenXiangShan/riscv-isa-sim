@@ -275,9 +275,12 @@ void processor_t::step(size_t n)
           }
 
           // debug mode wfis must nop
+          // difftest wfis must nop too
+          #ifndef DIFFTEST
           if (unlikely(in_wfi && !state.debug_mode)) {
             throw wait_for_interrupt_t();
           }
+          #endif
 
           in_wfi = false;
           insn_fetch_t fetch = mmu->load_insn(pc);
