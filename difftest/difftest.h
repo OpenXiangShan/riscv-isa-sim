@@ -88,6 +88,10 @@ typedef struct {
   uint64_t vlenb;
 #endif // CONFIG_DIFF_RVV
 
+#ifdef CONFIG_DIFF_FPU
+  uint64_t fcsr;
+#endif // CONFIG_DIFF_FPU
+
 #ifdef CONFIG_DIFF_DEBUG_MODE
   uint64_t debugMode;
   uint64_t dcsr;
