@@ -137,7 +137,7 @@ void DifftestRef::get_regs(diff_context_t *ctx) {
 #endif // CONFIG_DIFF_RVV
 
 #ifdef CONFIG_DIFF_FPU
-  ctx->fcsr = state->fcsr;
+  ctx->fcsr = state->fflags->read() | state->frm->read();
 #endif // CONFIG_DIFF_FPU
 }
 
@@ -325,6 +325,8 @@ void DifftestRef::set_regs(diff_context_t *ctx, bool on_demand) {
 #ifdef CONFIG_DIFF_FPU
   if (!on_demand || state->fcsr != ctx->fcsr) {
     state->fcsr = ctx->fcsr;
+    state->fflags->write(state->fcsr & 0x1f);
+    state->frm->write(state->fcsr & 0xe0);
   }
 #endif // CONFIG_DIFF_FPU
 }
