@@ -152,8 +152,8 @@ void DifftestRef::set_regs(diff_context_t *ctx, bool on_demand) {
   }
   if (STATE.sstatus->enabled(SSTATUS_FS)) {
     if (!on_demand || (state->fflags->read() | state->frm->read()) != ctx->fcsr) {
-      state->fflags->write(state->fcsr);
-      state->frm->write(state->fcsr);
+      state->fflags->write(ctx->fcsr);
+      state->frm->write(ctx->fcsr);
     }
   }
 #endif
