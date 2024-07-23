@@ -325,8 +325,8 @@ void DifftestRef::set_regs(diff_context_t *ctx, bool on_demand) {
 #ifdef CONFIG_DIFF_FPU
   if (STATE.sstatus->enabled(SSTATUS_FS)) {
     if (!on_demand || (state->fflags->read() | state->frm->read()) != ctx->fcsr) {
-      state->fflags->write(state->fcsr & 0x1f);
-      state->frm->write(state->fcsr & 0xe0);
+      state->fflags->write(state->fcsr);
+      state->frm->write(state->fcsr);
     }
   }
 #endif // CONFIG_DIFF_FPU
