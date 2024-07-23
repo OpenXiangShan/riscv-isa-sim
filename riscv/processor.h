@@ -163,7 +163,6 @@ struct state_t
 
   float_csr_t_p fflags;
   float_csr_t_p frm;
-  reg_t fcsr;
 
   csr_t_p menvcfg;
   csr_t_p senvcfg;
