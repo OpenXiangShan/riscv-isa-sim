@@ -20,6 +20,7 @@
 #define CONFIG_DIFF_ZICOND
 #define CONFIG_DIFF_ZICNTR
 #define CONFIG_DIFF_ZIHPM
+#define CONFIG_DIFF_SDTRIG
 #endif
 
 #if defined(CPU_NUTSHELL)
@@ -56,6 +57,11 @@
 #else
     #define ZIHPM_ISA_STRING ""
 #endif
+#ifdef CONFIG_DIFF_SDTRIG
+    #define SDTRIG_ISA_STRING "_sdtrig"
+#else
+    #define SDTRIG_ISA_STRING ""
+#endif
 
 #define CONFIG_DIFF_ISA_STRING \
     "RV64IMAFDC" \
@@ -64,6 +70,7 @@
     ZICOND_ISA_STRING \
     ZICNTR_ISA_STRING \
     ZIHPM_ISA_STRING \
+    SDTRIG_ISA_STRING \
     "_zba_zbb_zbc_zbs_zbkb_zbkc_zbkx_zknd_zkne_zknh_zksed_zksh_svinval"
 
 #define CONFIG_MEMORY_SIZE     (16 * 1024 * 1024 * 1024UL)
