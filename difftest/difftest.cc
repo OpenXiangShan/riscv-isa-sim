@@ -65,6 +65,7 @@ void DifftestRef::get_regs(diff_context_t *ctx) {
   for (int i = 0; i < NFPR; i++) {
     ctx->fpr[i] = unboxF64(state->FPR[i]);
   }
+  ctx->fcsr = state->fflags->read() | state->frm->read();
 #endif
   ctx->pc = state->pc;
   ctx->mstatus = state->mstatus->read();
@@ -135,10 +136,6 @@ void DifftestRef::get_regs(diff_context_t *ctx) {
   ctx->vtype      = vstate.vtype->read();
   ctx->vlenb      = vstate.vlenb;
 #endif // CONFIG_DIFF_RVV
-
-#ifdef CONFIG_DIFF_FPU
-  ctx->fcsr = state->fflags->read() | state->frm->read();
-#endif // CONFIG_DIFF_FPU
 }
 
 void DifftestRef::set_regs(diff_context_t *ctx, bool on_demand) {
@@ -151,6 +148,12 @@ void DifftestRef::set_regs(diff_context_t *ctx, bool on_demand) {
   for (int i = 0; i < NFPR; i++) {
     if (!on_demand || unboxF64(state->FPR[i]) != ctx->fpr[i]) {
       state->FPR.write(i, freg(f64(ctx->fpr[i])));
+    }
+  }
+  if (STATE.sstatus->enabled(SSTATUS_FS)) {
+    if (!on_demand || (state->fflags->read() | state->frm->read()) != ctx->fcsr) {
+      state->fflags->write(state->fcsr);
+      state->frm->write(state->fcsr);
     }
   }
 #endif
@@ -321,15 +324,6 @@ void DifftestRef::set_regs(diff_context_t *ctx, bool on_demand) {
     vstate.vlenb = ctx->vlenb;
   }
 #endif // CONFIG_DIFF_RVV
-
-#ifdef CONFIG_DIFF_FPU
-  if (STATE.sstatus->enabled(SSTATUS_FS)) {
-    if (!on_demand || (state->fflags->read() | state->frm->read()) != ctx->fcsr) {
-      state->fflags->write(state->fcsr);
-      state->frm->write(state->fcsr);
-    }
-  }
-#endif // CONFIG_DIFF_FPU
 }
 
 void DifftestRef::memcpy_from_dut(reg_t dest, void* src, size_t n) {
