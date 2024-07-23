@@ -65,7 +65,7 @@ void DifftestRef::get_regs(diff_context_t *ctx) {
   for (int i = 0; i < NFPR; i++) {
     ctx->fpr[i] = unboxF64(state->FPR[i]);
   }
-  ctx->fcsr = state->fflags->read() | state->frm->read();
+  ctx->fcsr = state->fflags->read() | (state->frm->read() << FSR_RD_SHIFT);
 #endif
   ctx->pc = state->pc;
   ctx->mstatus = state->mstatus->read();
@@ -151,7 +151,7 @@ void DifftestRef::set_regs(diff_context_t *ctx, bool on_demand) {
     }
   }
   if (STATE.sstatus->enabled(SSTATUS_FS)) {
-    if (!on_demand || (state->fflags->read() | state->frm->read()) != ctx->fcsr) {
+    if (!on_demand || (state->fflags->read() | state->frm->read() << FSR_RD_SHIFT) != ctx->fcsr) {
       state->fflags->write(ctx->fcsr);
       state->frm->write(ctx->fcsr);
     }
