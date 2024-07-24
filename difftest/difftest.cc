@@ -136,6 +136,12 @@ void DifftestRef::get_regs(diff_context_t *ctx) {
   ctx->vtype      = vstate.vtype->read();
   ctx->vlenb      = vstate.vlenb;
 #endif // CONFIG_DIFF_RVV
+
+#ifdef CONFIG_DIFF_SDTRIG
+  ctx->tselect = state->tselect->read();
+  ctx->tdata1  = state->csrmap[CSR_TDATA1]->read();
+  ctx->tinfo   = state->csrmap[CSR_TINFO]->read();
+#endif // CONFIG_DIFF_SDTRIG
 }
 
 void DifftestRef::set_regs(diff_context_t *ctx, bool on_demand) {
@@ -324,6 +330,18 @@ void DifftestRef::set_regs(diff_context_t *ctx, bool on_demand) {
     vstate.vlenb = ctx->vlenb;
   }
 #endif // CONFIG_DIFF_RVV
+
+#ifdef CONFIG_DIFF_SDTRIG
+  if (!on_demand || state->tselect->read() != ctx->tselect) {
+    state->tselect->write(ctx->tselect);
+  }
+  if (!on_demand || state->csrmap[CSR_TDATA1]->read() != ctx->tdata1) {
+    state->csrmap[CSR_TDATA1]->write(ctx->tdata1);
+  }
+  if (!on_demand || state->csrmap[CSR_TINFO]->read() != ctx->tinfo) {
+    state->csrmap[CSR_TINFO]->write(ctx->tinfo);
+  }
+#endif // CONFIG_DIFF_SDTRIG
 }
 
 void DifftestRef::memcpy_from_dut(reg_t dest, void* src, size_t n) {
