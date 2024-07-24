@@ -92,6 +92,13 @@ typedef struct {
   uint64_t fcsr;
 #endif // CONFIG_DIFF_FPU
 
+#ifdef CONFIG_DIFF_SDTRIG
+  uint64_t tselect;
+  uint64_t tdata1;
+  uint64_t tinfo;
+  uint64_t tcontrol;
+#endif // CONFIG_DIFF_SDTRIG
+
 #ifdef CONFIG_DIFF_DEBUG_MODE
   uint64_t debugMode;
   uint64_t dcsr;
