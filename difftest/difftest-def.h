@@ -20,7 +20,7 @@
 #define CONFIG_DIFF_ZICOND
 #define CONFIG_DIFF_ZICNTR
 #define CONFIG_DIFF_ZIHPM
-#define CONFIG_DIFF_SDTRIG
+// #define CONFIG_DIFF_SDTRIG
 #endif
 
 #if defined(CPU_NUTSHELL)
