@@ -30,6 +30,7 @@
 #define CONFIG_FLASH_SIZE      0x1000UL
 #define CONFIG_PMP_NUM         0
 #define CONFIG_PMP_MAX_NUM     0
+#define CONFIG_TRIGGER_NUM     0
 
 #elif defined(CPU_XIANGSHAN)
 #ifdef CONFIG_DIFF_RVH
@@ -79,6 +80,7 @@
 #define CONFIG_PMP_NUM         16
 #define CONFIG_PMP_MAX_NUM     16
 #define CONFIG_PMP_GRAN        12
+#define CONFIG_TRIGGER_NUM     4
 
 #elif defined(CPU_ROCKET_CHIP)
 #define CONFIG_DIFF_ISA_STRING "rv64imafdczicsr_zifencei_zihpm_zicntr"
@@ -87,6 +89,7 @@
 #define CONFIG_FLASH_SIZE      0x10000UL
 #define CONFIG_PMP_NUM         0
 #define CONFIG_PMP_MAX_NUM     64
+#define CONFIG_TRIGGER_NUM     0
 #endif
 
 #endif

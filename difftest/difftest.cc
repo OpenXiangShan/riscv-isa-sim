@@ -458,7 +458,7 @@ const cfg_t *DifftestRef::create_cfg() {
   cfg->mem_layout = memory_layout;
   cfg->hartids = std::vector<size_t>{overrided_mhartid};
   cfg->real_time_clint = false;
-  cfg->trigger_count = 0;
+  cfg->trigger_count = CONFIG_TRIGGER_NUM;
   return cfg;
 }
 
