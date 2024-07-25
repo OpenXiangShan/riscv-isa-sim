@@ -638,6 +638,9 @@ std::optional<match_result_t> module_t::detect_trap_match(const trap_t& t) noexc
 
 reg_t module_t::tinfo_read(unsigned UNUSED index) const noexcept
 {
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+  return (1 << CSR_TDATA1_TYPE_MCONTROL) ;
+#else
   /* In spike, every trigger supports the same types. */
   return (1 << CSR_TDATA1_TYPE_MCONTROL) |
          (1 << CSR_TDATA1_TYPE_ICOUNT) |
@@ -646,6 +649,7 @@ reg_t module_t::tinfo_read(unsigned UNUSED index) const noexcept
          (1 << CSR_TDATA1_TYPE_MCONTROL6) |
          (1 << CSR_TDATA1_TYPE_DISABLED) |
          (CSR_TINFO_VERSION_1 << CSR_TINFO_VERSION_OFFSET);
+#endif
 }
 
 };
