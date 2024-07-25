@@ -141,6 +141,7 @@ void DifftestRef::get_regs(diff_context_t *ctx) {
   ctx->tselect = state->tselect->read();
   ctx->tdata1  = state->csrmap[CSR_TDATA1]->read();
   ctx->tinfo   = state->csrmap[CSR_TINFO]->read();
+  ctx->tcontrol = state->tcontrol->read();
 #endif // CONFIG_DIFF_SDTRIG
 }
 
@@ -340,6 +341,9 @@ void DifftestRef::set_regs(diff_context_t *ctx, bool on_demand) {
   }
   if (!on_demand || state->csrmap[CSR_TINFO]->read() != ctx->tinfo) {
     state->csrmap[CSR_TINFO]->write(ctx->tinfo);
+  }
+  if (!on_demand || state->tcontrol->read() != ctx->tcontrol) {
+    state->tcontrol->write(ctx->tcontrol);
   }
 #endif // CONFIG_DIFF_SDTRIG
 }
