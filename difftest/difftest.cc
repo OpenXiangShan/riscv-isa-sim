@@ -157,11 +157,9 @@ void DifftestRef::set_regs(diff_context_t *ctx, bool on_demand) {
       state->FPR.write(i, freg(f64(ctx->fpr[i])));
     }
   }
-  if (STATE.sstatus->enabled(SSTATUS_FS)) {
-    if (!on_demand || (state->fflags->read() | state->frm->read() << FSR_RD_SHIFT) != ctx->fcsr) {
-      state->fflags->write(ctx->fcsr);
-      state->frm->write(ctx->fcsr);
-    }
+  if (!on_demand || (state->fflags->read() | state->frm->read() << FSR_RD_SHIFT) != ctx->fcsr) {
+    state->fflags->write_raw(ctx->fcsr & FSR_AEXC);
+    state->frm->write_raw((ctx->fcsr & FSR_RD) >> FSR_RD_SHIFT);
   }
 #endif
   if (!on_demand || state->pc != ctx->pc) {
@@ -310,9 +308,8 @@ void DifftestRef::set_regs(diff_context_t *ctx, bool on_demand) {
   if (!on_demand || vstate.vstart->read() != ctx->vstart) {
     vstate.vstart->write_raw(ctx->vstart);
   }
-  /**********************NEED TO ADD WRITE*********************************************/
   if (!on_demand || vstate.vxsat->read() != ctx->vxsat) {
-    // vstate.vxsat->write(ctx->vxsat);
+    vstate.vxsat->write_raw(ctx->vxsat);
   }
   if (!on_demand || vstate.vxrm->read() != ctx->vxrm) {
     vstate.vxrm->write_raw(ctx->vxrm);
