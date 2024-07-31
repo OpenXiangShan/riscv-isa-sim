@@ -93,7 +93,11 @@ public:
   int setvl_count;
   reg_t vlmax;
   reg_t vlenb;
+#if defined(DIFFTEST)
+  vxsat_csr_t_p vxsat;
+#else
   csr_t_p vxsat;
+#endif
   vector_csr_t_p vxrm, vstart, vl, vtype;
   reg_t vma, vta;
   reg_t vsew;
