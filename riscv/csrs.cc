@@ -1522,6 +1522,14 @@ void float_csr_t::verify_permissions(insn_t insn, bool write) const {
   }
 }
 
+#if defined(DIFFTEST)
+void float_csr_t::write_raw(const reg_t val) noexcept {
+  const bool success = basic_csr_t::unlogged_write(val);
+  if (success)
+    log_write();
+}
+#endif
+
 bool float_csr_t::unlogged_write(const reg_t val) noexcept {
   dirty_fp_state;
   return masked_csr_t::unlogged_write(val);
@@ -1611,6 +1619,14 @@ void vxsat_csr_t::verify_permissions(insn_t insn, bool write) const {
   require(proc->any_vector_extensions() && STATE.sstatus->enabled(SSTATUS_VS));
   masked_csr_t::verify_permissions(insn, write);
 }
+
+#if defined(DIFFTEST)
+void vxsat_csr_t::write_raw(const reg_t val) noexcept {
+  const bool success = basic_csr_t::unlogged_write(val);
+  if (success)
+    log_write();
+}
+#endif
 
 bool vxsat_csr_t::unlogged_write(const reg_t val) noexcept {
   dirty_vs_state;
