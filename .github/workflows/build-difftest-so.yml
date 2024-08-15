@@ -1,0 +1,34 @@
+name: CI for difftest
+
+on:
+  push:
+    branches: [difftest]
+  pull_request:
+    branches: [difftest]
+
+jobs:
+  build:
+    name: Build spike-so for difftest
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        cpu: [xiangshan, nutshell, rocket_chip]
+    continue-on-error: false
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: sudo xargs apt-get install -y < .github/workflows/apt-packages.txt
+
+      - name: build spike-so
+        run: |
+          BUILD_CPU=${{ matrix.cpu }}
+          make -C difftest CPU=${BUILD_CPU^^} -j4
+
+      - name: archive spike-so artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: riscv64-${{ matrix.cpu }}-spike-so
+          path: difftest/build/riscv64-spike-so
