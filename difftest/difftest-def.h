@@ -31,6 +31,8 @@
 #define CONFIG_PMP_NUM         0
 #define CONFIG_PMP_MAX_NUM     0
 #define CONFIG_TRIGGER_NUM     0
+#define CONFIG_MAX_PADDR_BITS  32
+#define CONFIG_MMU_CAPABILITY  IMPL_MMU_SV39
 
 #elif defined(CPU_XIANGSHAN)
 #ifdef CONFIG_DIFF_RVH
@@ -81,6 +83,8 @@
 #define CONFIG_PMP_MAX_NUM     16
 #define CONFIG_PMP_GRAN        12
 #define CONFIG_TRIGGER_NUM     4
+#define CONFIG_MAX_PADDR_BITS  48
+#define CONFIG_MMU_CAPABILITY  IMPL_MMU_SV48
 
 #elif defined(CPU_ROCKET_CHIP)
 #define CONFIG_DIFF_ISA_STRING "rv64imafdczicsr_zifencei_zihpm_zicntr"
@@ -90,6 +94,8 @@
 #define CONFIG_PMP_NUM         0
 #define CONFIG_PMP_MAX_NUM     64
 #define CONFIG_TRIGGER_NUM     0
+#define CONFIG_MAX_PADDR_BITS  32
+#define CONFIG_MMU_CAPABILITY  IMPL_MMU_SV39
 #endif
 
 #endif
