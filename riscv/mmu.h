@@ -19,10 +19,8 @@
 #define PGSHIFT 12
 const reg_t PGSIZE = 1 << PGSHIFT;
 const reg_t PGMASK = ~(PGSIZE-1);
-#if defined(CPU_ROCKET_CHIP) || defined(CPU_NUTSHELL)
-#define MAX_PADDR_BITS 32
-#elif defined(CPU_XIANGSHAN)
-#define MAX_PADDR_BITS 36
+#ifdef CONFIG_MAX_PADDR_BITS
+#define MAX_PADDR_BITS CONFIG_MAX_PADDR_BITS
 #else
 #define MAX_PADDR_BITS 64
 #endif
