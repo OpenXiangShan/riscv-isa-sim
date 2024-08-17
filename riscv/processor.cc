@@ -74,8 +74,8 @@ processor_t::processor_t(const char* isa_str, const char* priv_str,
   if (isa.get_max_xlen() == 32)
     set_mmu_capability(IMPL_MMU_SV32);
   else if (isa.get_max_xlen() == 64)
-#if defined(CPU_ROCKET_CHIP) || defined(CPU_NUTSHELL) || defined(CPU_XIANGSHAN)
-    set_mmu_capability(IMPL_MMU_SV39);
+#ifdef CONFIG_MMU_CAPABILITY
+    set_mmu_capability(CONFIG_MMU_CAPABILITY);
 #else
     set_mmu_capability(IMPL_MMU_SV57);
 #endif
