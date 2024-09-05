@@ -22,7 +22,7 @@ const reg_t PGMASK = ~(PGSIZE-1);
 #ifdef CONFIG_MAX_PADDR_BITS
 #define MAX_PADDR_BITS CONFIG_MAX_PADDR_BITS
 #else
-#define MAX_PADDR_BITS 64
+#define MAX_PADDR_BITS 56 // imposed by Sv39 / Sv48
 #endif
 
 struct insn_fetch_t

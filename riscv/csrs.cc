@@ -579,7 +579,7 @@ bool mstatus_csr_t::unlogged_write(const reg_t val) noexcept {
   reg_t new_mstatus = (read() & ~mask) | (adjusted_val & mask);
   new_mstatus ^= new_mstatus & (0x3 << 13); // FS is always zero
 #else
-  const reg_t new_mstatus = (read() & ~mask) | (adjusted_val & mask);
+  reg_t new_mstatus = (read() & ~mask) | (adjusted_val & mask);
   if (new_mstatus & MSTATUS_MDT) {
   new_mstatus = new_mstatus & ~MSTATUS_MIE;
   }

@@ -340,8 +340,7 @@ void sim_t::set_procs_debug(bool value)
 
 static bool paddr_ok(reg_t addr)
 {
-  static_assert(MAX_PADDR_BITS == 8 * sizeof(addr));
-  return true;
+  return (addr >> MAX_PADDR_BITS) == 0;
 }
 
 bool sim_t::mmio_load(reg_t paddr, size_t len, uint8_t* bytes)
