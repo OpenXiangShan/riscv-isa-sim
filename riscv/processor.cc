@@ -150,6 +150,7 @@ void state_t::reset(processor_t* const proc, reg_t max_isa)
   prv_changed = false;
   v_changed = false;
 
+
   serialized = false;
   debug_mode = false;
   single_step = STEP_NONE;

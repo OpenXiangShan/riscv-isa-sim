@@ -309,7 +309,6 @@ void processor_t::step(size_t n)
         for (auto ic_entry = _mmu->access_icache(pc); ; ) {
           auto fetch = ic_entry->data;
           sim->difftest_log("pc = 0x%lx inst 0x%x", pc, fetch.insn);
-          execute_insn_prehook(fetch.insn);
           pc = execute_insn_fast(this, pc, fetch);
           ic_entry = ic_entry->next;
           if (unlikely(ic_entry->tag != pc))
