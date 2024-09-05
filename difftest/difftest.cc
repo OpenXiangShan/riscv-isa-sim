@@ -447,7 +447,6 @@ const cfg_t *DifftestRef::create_cfg() {
   cfg->bootargs = nullptr;
   cfg->isa = CONFIG_DIFF_ISA_STRING;
   cfg->priv = DEFAULT_PRIV;
-  cfg->varch = DEFAULT_VARCH;
   cfg->misaligned = false;
     // const endianness_t default_endianness,
   cfg->endianness = endianness_little;
