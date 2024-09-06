@@ -22,6 +22,7 @@
 #define RS2 READ_REG(insn.rs2())
 #define RS3 READ_REG(insn.rs3())
 #define WRITE_RD(value) WRITE_REG(insn.rd(), value)
+#define CHECK_RD() CHECK_REG(insn.rd())
 
 /* 0 : int
  * 1 : floating
@@ -30,9 +31,9 @@
  * 4 : csr
  */
 #define WRITE_REG(reg, value) ({ \
+    CHECK_REG(reg); \
     reg_t wdata = (value); /* value may have side effects */ \
     if (DECODE_MACRO_USAGE_LOGGED) STATE.log_reg_write[(reg) << 4] = {wdata, 0}; \
-    CHECK_REG(reg); \
     STATE.XPR.write(reg, wdata); \
   })
 #define WRITE_FREG(reg, value) ({ \
@@ -41,6 +42,15 @@
     DO_WRITE_FREG(reg, wdata); \
   })
 #define WRITE_VSTATUS STATE.log_reg_write[3] = {0, 0};
+
+/* the value parameter needs to be evaluated before writing to the registers */
+#define WRITE_REG_PAIR(reg, value) \
+  if (reg != 0) { \
+    require((reg) % 2 == 0); \
+    uint64_t val = (value); \
+    WRITE_REG(reg, sext32(val)); \
+    WRITE_REG((reg) + 1, (sreg_t(val)) >> 32); \
+  }
 
 // RVC macros
 #define WRITE_RVC_RS1S(value) WRITE_REG(insn.rvc_rs1s(), value)
@@ -69,13 +79,15 @@
 #define RS1_PAIR READ_REG_PAIR(insn.rs1())
 #define RS2_PAIR READ_REG_PAIR(insn.rs2())
 #define RD_PAIR READ_REG_PAIR(insn.rd())
+#define WRITE_RD_PAIR(value) WRITE_REG_PAIR(insn.rd(), value)
 
-#define WRITE_RD_PAIR(value) \
-  if (insn.rd() != 0) { \
-    require(insn.rd() % 2 == 0); \
-    WRITE_REG(insn.rd(), sext32(value)); \
-    WRITE_REG(insn.rd() + 1, (sreg_t(value)) >> 32); \
-  }
+// Zilsd macros
+#define WRITE_RD_D(value) (xlen == 32 ? WRITE_RD_PAIR(value) : WRITE_RD(value))
+
+// Zcmlsd macros
+#define WRITE_RVC_RS2S_PAIR(value) WRITE_REG_PAIR(insn.rvc_rs2s(), value)
+#define RVC_RS2S_PAIR READ_REG_PAIR(insn.rvc_rs2s())
+#define RVC_RS2_PAIR READ_REG_PAIR(insn.rvc_rs2())
 
 // FPU macros
 #define READ_ZDINX_REG(reg) (xlen == 32 ? f64(READ_REG_PAIR(reg)) : f64(STATE.XPR[reg] & (uint64_t)-1))
@@ -122,8 +134,7 @@ do { \
 do { \
   if (p->extension_enabled(EXT_ZFINX)) { \
     if (xlen == 32) { \
-      uint64_t val = (value).v; \
-      WRITE_RD_PAIR(val); \
+      WRITE_RD_PAIR((value).v); \
     } else { \
       WRITE_REG(insn.rd(), (value).v); \
     } \
@@ -157,11 +168,10 @@ static inline bool is_aligned(const unsigned val, const unsigned pos)
 #define require_fs          require(STATE.sstatus->enabled(SSTATUS_FS))
 #define require_fp          STATE.fflags->verify_permissions(insn, false)
 #define require_accelerator require(STATE.sstatus->enabled(SSTATUS_XS))
-#define require_vector_vs   require(STATE.sstatus->enabled(SSTATUS_VS))
+#define require_vector_vs   require(p->any_vector_extensions() && STATE.sstatus->enabled(SSTATUS_VS))
 #define require_vector(alu) \
   do { \
     require_vector_vs; \
-    require_extension('V'); \
     require(!P.VU.vill); \
     if (alu && !P.VU.vstart_alu) \
       require(P.VU.vstart->read() == 0); \
@@ -171,7 +181,6 @@ static inline bool is_aligned(const unsigned val, const unsigned pos)
 #define require_vector_novtype(is_log) \
   do { \
     require_vector_vs; \
-    require_extension('V'); \
     if (is_log) \
       WRITE_VSTATUS; \
     dirty_vs_state; \
@@ -203,15 +212,18 @@ static inline bool is_aligned(const unsigned val, const unsigned pos)
     } \
   } while (0);
 
-#define set_fp_exceptions ({ if (softfloat_exceptionFlags) { \
-                               STATE.fflags->write(STATE.fflags->read() | softfloat_exceptionFlags); \
-                             } \
-                             softfloat_exceptionFlags = 0; })
+#define raise_fp_exceptions(flags) do { if (flags) STATE.fflags->write(STATE.fflags->read() | (flags)); } while (0);
+#define set_fp_exceptions \
+  do { \
+    raise_fp_exceptions(softfloat_exceptionFlags); \
+    softfloat_exceptionFlags = 0; \
+  } while (0);
 
 #define sext32(x) ((sreg_t)(int32_t)(x))
 #define zext32(x) ((reg_t)(uint32_t)(x))
-#define sext_xlen(x) (((sreg_t)(x) << (64 - xlen)) >> (64 - xlen))
+#define sext(x, pos) (((sreg_t)(x) << (64 - (pos))) >> (64 - (pos)))
 #define zext(x, pos) (((reg_t)(x) << (64 - (pos))) >> (64 - (pos)))
+#define sext_xlen(x) sext(x, xlen)
 #define zext_xlen(x) zext(x, xlen)
 
 #define set_pc(x) \
