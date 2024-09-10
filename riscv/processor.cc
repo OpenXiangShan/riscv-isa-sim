@@ -501,7 +501,11 @@ void processor_t::take_trap(trap_t& t, reg_t epc)
 #endif
     state.nonvirtual_stval->write(t.get_tval());
     state.htval->write(t.get_tval2());
+#ifdef CPU_XIANGSHAN
+    state.htinst->write(0);
+#else
     state.htinst->write(t.get_tinst());
+#endif
 
     reg_t s = state.nonvirtual_sstatus->read();
     s = set_field(s, MSTATUS_SPIE, get_field(s, MSTATUS_SIE));
@@ -551,7 +555,11 @@ void processor_t::take_trap(trap_t& t, reg_t epc)
     state.mcause->write(supv_double_trap ? CAUSE_DOUBLE_TRAP : t.cause());
     state.mtval->write(t.get_tval());
     state.mtval2->write(supv_double_trap ? t.cause() : t.get_tval2());
+#ifdef CPU_XIANGSHAN
+    state.mtinst->write(0);
+#else
     state.mtinst->write(t.get_tinst());
+#endif
 
     s = set_field(s, MSTATUS_MPIE, get_field(s, MSTATUS_MIE));
     s = set_field(s, MSTATUS_MPP, state.prv);
