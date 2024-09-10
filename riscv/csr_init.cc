@@ -46,7 +46,7 @@ void state_t::csr_init(processor_t* const proc, reg_t max_isa)
     add_csr(CSR_CYCLE, std::make_shared<counter_proxy_csr_t>(proc, CSR_CYCLE, mcycle));
 #ifndef CPU_ROCKET_CHIP
     add_csr(CSR_TIME, time_proxy = std::make_shared<counter_proxy_csr_t>(proc, CSR_TIME, time));
-#endif 
+#endif
   }
   if (xlen == 32) {
     csr_t_p minstreth, mcycleh;
@@ -60,7 +60,7 @@ void state_t::csr_init(processor_t* const proc, reg_t max_isa)
       add_csr(CSR_CYCLEH, std::make_shared<counter_proxy_csr_t>(proc, CSR_CYCLEH, mcycleh));
 #ifndef CPU_ROCKET_CHIP
       add_csr(CSR_TIMEH, std::make_shared<counter_proxy_csr_t>(proc, CSR_TIMEH, timeh));
-#endif 
+#endif
     }
   } else {
     add_csr(CSR_MINSTRET, minstret);
