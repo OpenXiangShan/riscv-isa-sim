@@ -151,8 +151,8 @@ void state_t::csr_init(processor_t* const proc, reg_t max_isa)
   add_hypervisor_csr(CSR_VSTVAL, vstval = std::make_shared<basic_csr_t>(proc, CSR_VSTVAL, 0));
   add_supervisor_csr(CSR_STVAL, stval = std::make_shared<virtualized_csr_t>(proc, nonvirtual_stval, vstval));
   nonvirtual_sscratch = std::make_shared<basic_csr_t>(proc, CSR_SSCRATCH, 0);
-  add_supervisor_csr(CSR_SSCRATCH, sscratch = std::make_shared<virtualized_csr_t>(proc, nonvirtual_sscratch, vsscratch));
   add_hypervisor_csr(CSR_VSSCRATCH, vsscratch = std::make_shared<basic_csr_t>(proc, CSR_VSSCRATCH, 0));
+  add_supervisor_csr(CSR_SSCRATCH, sscratch = std::make_shared<virtualized_csr_t>(proc, nonvirtual_sscratch, vsscratch));
   nonvirtual_stvec = std::make_shared<tvec_csr_t>(proc, CSR_STVEC);
   add_hypervisor_csr(CSR_VSTVEC, vstvec = std::make_shared<tvec_csr_t>(proc, CSR_VSTVEC));
   add_supervisor_csr(CSR_STVEC, stvec = std::make_shared<virtualized_csr_t>(proc, nonvirtual_stvec, vstvec));
