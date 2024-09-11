@@ -447,7 +447,7 @@ const cfg_t *DifftestRef::create_cfg() {
   cfg->bootargs = nullptr;
   cfg->isa = CONFIG_DIFF_ISA_STRING;
   cfg->priv = DEFAULT_PRIV;
-  cfg->misaligned = false;
+  cfg->misaligned = CONFIG_MISALIGNED;
     // const endianness_t default_endianness,
   cfg->endianness = endianness_little;
   cfg->pmpregions = CONFIG_PMP_NUM;
