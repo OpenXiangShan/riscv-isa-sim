@@ -78,7 +78,9 @@
     "_zba_zbb_zbc_zbs_zbkb_zbkc_zbkx" \
     "_zknd_zkne_zknh_zksed_zksh" \
     "_zfa_zfhmin" \
-    "_svinval_sscofpmf"
+    "_svinval_sscofpmf" \
+    "_svpbmt" \
+    "_zicbom_zicboz"
 
 #define CONFIG_MEMORY_SIZE     (16 * 1024 * 1024 * 1024UL)
 #define CONFIG_FLASH_BASE      0x10000000UL
