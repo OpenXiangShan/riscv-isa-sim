@@ -174,7 +174,11 @@ reg_t mcontrol_t::tdata1_read(const processor_t * const proc) const noexcept {
   v = set_field(v, MCONTROL_TYPE(xlen), CSR_TDATA1_TYPE_MCONTROL);
   v = set_field(v, CSR_MCONTROL_DMODE(xlen), dmode);
   v = set_field(v, MCONTROL_MASKMAX(xlen), maskmax);
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+  v = set_field(v, CSR_MCONTROL_HIT, 0);
+#else
   v = set_field(v, CSR_MCONTROL_HIT, hit);
+#endif
   v = set_field(v, MCONTROL_SELECT, select);
   v = set_field(v, MCONTROL_TIMING, timing);
   v = set_field(v, MCONTROL_ACTION, action);
@@ -193,7 +197,11 @@ void mcontrol_t::tdata1_write(processor_t * const proc, const reg_t val, const b
   auto xlen = proc->get_xlen();
   assert(get_field(val, CSR_MCONTROL_TYPE(xlen)) == CSR_TDATA1_TYPE_MCONTROL);
   dmode = get_field(val, CSR_MCONTROL_DMODE(xlen));
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+  hit = 0;
+#else
   hit = get_field(val, CSR_MCONTROL_HIT);
+#endif
   select = get_field(val, MCONTROL_SELECT);
   timing = legalize_timing(val, MCONTROL_TIMING, MCONTROL_SELECT, MCONTROL_EXECUTE, MCONTROL_LOAD);
   action = legalize_action(val, MCONTROL_ACTION, CSR_MCONTROL_DMODE(xlen));
