@@ -179,6 +179,12 @@ public:
   template<typename T, typename op>
   T amo(reg_t addr, op f) {
     convert_load_traps_to_store_traps({
+
+      xlate_flags_t xlate_flags = {};
+      auto access_info = generate_access_info(addr, LOAD, xlate_flags);
+      reg_t transformed_addr = access_info.transformed_vaddr;
+      check_triggers(triggers::OPERATION_LOAD, transformed_addr, access_info.effective_virt);
+
       store_slow_path(addr, sizeof(T), nullptr, {}, false, true);
       auto lhs = load<T>(addr);
       sim->is_amo = true;
