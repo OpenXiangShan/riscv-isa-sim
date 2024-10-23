@@ -400,7 +400,11 @@ reg_t icount_t::tdata1_read(const processor_t * const proc) const noexcept
   tdata1 = set_field(tdata1, CSR_ICOUNT_DMODE(xlen), dmode);
   tdata1 = set_field(tdata1, CSR_ICOUNT_VS, proc->extension_enabled('H') ? vs : 0);
   tdata1 = set_field(tdata1, CSR_ICOUNT_VU, proc->extension_enabled('H') ? vu : 0);
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+  tdata1 = set_field(tdata1, CSR_ICOUNT_HIT, 0);
+#else
   tdata1 = set_field(tdata1, CSR_ICOUNT_HIT, hit);
+#endif
   tdata1 = set_field(tdata1, CSR_ICOUNT_COUNT, count_read_value);
   tdata1 = set_field(tdata1, CSR_ICOUNT_M, m);
   tdata1 = set_field(tdata1, CSR_ICOUNT_PENDING, pending_read_value);
@@ -417,7 +421,11 @@ void icount_t::tdata1_write(processor_t * const proc, const reg_t val, const boo
   dmode = proc->get_state()->debug_mode ? get_field(val, CSR_ICOUNT_DMODE(xlen)) : 0;
   vs = get_field(val, CSR_ICOUNT_VS);
   vu = get_field(val, CSR_ICOUNT_VU);
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+  hit = 0;
+#else
   hit = get_field(val, CSR_ICOUNT_HIT);
+#endif
   count = count_read_value = get_field(val, CSR_ICOUNT_COUNT);
   m = get_field(val, CSR_ICOUNT_M);
   pending = pending_read_value = get_field(val, CSR_ICOUNT_PENDING);
@@ -438,7 +446,11 @@ reg_t itrigger_t::tdata1_read(const processor_t * const proc) const noexcept
   reg_t tdata1 = 0;
   tdata1 = set_field(tdata1, CSR_ITRIGGER_TYPE(xlen), CSR_TDATA1_TYPE_ITRIGGER);
   tdata1 = set_field(tdata1, CSR_ITRIGGER_DMODE(xlen), dmode);
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+  tdata1 = set_field(tdata1, CSR_ITRIGGER_HIT(xlen), 0);
+#else
   tdata1 = set_field(tdata1, CSR_ITRIGGER_HIT(xlen), hit);
+#endif
   tdata1 = set_field(tdata1, CSR_ITRIGGER_VS, proc->extension_enabled('H') ? vs : 0);
   tdata1 = set_field(tdata1, CSR_ITRIGGER_VU, proc->extension_enabled('H') ? vu : 0);
   tdata1 = set_field(tdata1, CSR_ITRIGGER_NMI, nmi);
@@ -454,7 +466,11 @@ void itrigger_t::tdata1_write(processor_t * const proc, const reg_t val, const b
   auto xlen = proc->get_xlen();
   assert(get_field(val, CSR_ITRIGGER_TYPE(xlen)) == CSR_TDATA1_TYPE_ITRIGGER);
   dmode = get_field(val, CSR_ITRIGGER_DMODE(xlen));
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+  hit = 0;
+#else
   hit = get_field(val, CSR_ITRIGGER_HIT(xlen));
+#endif
   vs = get_field(val, CSR_ITRIGGER_VS);
   vu = get_field(val, CSR_ITRIGGER_VU);
   nmi = get_field(val, CSR_ITRIGGER_NMI);
@@ -492,7 +508,11 @@ reg_t etrigger_t::tdata1_read(const processor_t * const proc) const noexcept
   reg_t tdata1 = 0;
   tdata1 = set_field(tdata1, CSR_ETRIGGER_TYPE(xlen), CSR_TDATA1_TYPE_ETRIGGER);
   tdata1 = set_field(tdata1, CSR_ETRIGGER_DMODE(xlen), dmode);
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+  tdata1 = set_field(tdata1, CSR_ETRIGGER_HIT(xlen), 0);
+#else
   tdata1 = set_field(tdata1, CSR_ETRIGGER_HIT(xlen), hit);
+#endif
   tdata1 = set_field(tdata1, CSR_ETRIGGER_VS, proc->extension_enabled('H') ? vs : 0);
   tdata1 = set_field(tdata1, CSR_ETRIGGER_VU, proc->extension_enabled('H') ? vu : 0);
   tdata1 = set_field(tdata1, CSR_ETRIGGER_M, m);
@@ -507,7 +527,11 @@ void etrigger_t::tdata1_write(processor_t * const proc, const reg_t val, const b
   auto xlen = proc->get_xlen();
   assert(get_field(val, CSR_ETRIGGER_TYPE(xlen)) == CSR_TDATA1_TYPE_ETRIGGER);
   dmode = get_field(val, CSR_ETRIGGER_DMODE(xlen));
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+  hit = 0;
+#else
   hit = get_field(val, CSR_ETRIGGER_HIT(xlen));
+#endif
   vs = get_field(val, CSR_ETRIGGER_VS);
   vu = get_field(val, CSR_ETRIGGER_VU);
   m = get_field(val, CSR_ETRIGGER_M);
