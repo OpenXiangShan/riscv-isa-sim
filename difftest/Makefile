@@ -39,7 +39,7 @@ SPIKE_INCS = fesvr riscv disasm customext fdt softfloat spike_main spike_dasm
 INC_PATH   = -I$(SPIKE_PATH) -I$(BUILD_DIR) $(addprefix -I$(SPIKE_PATH)/, $(SPIKE_INCS))
 
 SPIKE_SRCS = $(shell find $(SPIKE_PATH) -maxdepth 2 -name '*.cc') \
-             $(shell find $(SPIKE_PATH) -maxdepth 2 -name '*.h')
+             $(shell find $(SPIKE_PATH) -maxdepth 3 -name '*.h')
 SPIKE_LIBS = libriscv.a libdisasm.a libsoftfloat.a libfesvr.a libfdt.a
 INC_LIBS   = $(addprefix $(BUILD_DIR)/, $(SPIKE_LIBS))
 
