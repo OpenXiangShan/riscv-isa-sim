@@ -645,9 +645,6 @@ std::optional<match_result_t> module_t::detect_memory_access_match(operation_t o
 
 std::optional<match_result_t> module_t::detect_icount_match() noexcept
 {
-  for (auto trigger: triggers)
-    trigger->stash_read_values();
-
   state_t * const state = proc->get_state();
   if (state->debug_mode)
     return std::nullopt;
@@ -661,6 +658,10 @@ std::optional<match_result_t> module_t::detect_icount_match() noexcept
   if (ret == std::nullopt || ret->action != MCONTROL_ACTION_DEBUG_MODE)
     for (auto trigger: triggers)
       trigger->detect_icount_decrement(proc);
+
+  for (auto trigger: triggers)
+    trigger->stash_read_values();
+
   return ret;
 }
 
