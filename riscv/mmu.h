@@ -297,6 +297,11 @@ public:
   template<typename T>
   bool store_conditional(reg_t addr, T val)
   {
+    xlate_flags_t xlate_flags = {};
+    auto access_info = generate_access_info(addr, STORE, xlate_flags);
+    reg_t transformed_addr = access_info.transformed_vaddr;
+    check_triggers(triggers::OPERATION_STORE, transformed_addr, access_info.effective_virt);
+
     bool have_reservation = check_load_reservation(addr, sizeof(T));
     if (have_reservation && sim->sc_failed) {
       sim->difftest_log("The REF is forced to have an SC failure according to the DUT.");
