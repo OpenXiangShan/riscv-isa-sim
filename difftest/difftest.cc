@@ -394,6 +394,11 @@ void DifftestRef::raise_intr(uint64_t no) {
   }
 }
 
+void DifftestRef::update_mip(void *non_reg_interrupt_pending) {
+  auto n = (DifftestNonRegInterruptPending *) non_reg_interrupt_pending;
+  state->mip->backdoor_write_with_mask(MIP_MTIP, n->platform_irp_mtip ? MIP_MTIP : 0);
+}
+
 void DifftestRef::display() {
     int i;
   for (i = 0; i < 32; i ++) {
@@ -598,6 +603,10 @@ void difftest_close() {
 
 void difftest_set_ramsize(size_t size) {
   overrided_mem_size = size;
+}
+
+void difftest_non_reg_interrupt_pending(void *non_reg_interrupt_pending) {
+  ref->update_mip(non_reg_interrupt_pending);
 }
 
 }
