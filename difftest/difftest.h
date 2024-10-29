@@ -118,6 +118,18 @@ public:
   uint64_t sc_failed = 0;
 };
 
+class DifftestNonRegInterruptPending {
+  public:
+    bool platform_irp_meip = false;
+    bool platform_irp_mtip = false;
+    bool platform_irp_msip = false;
+    bool platform_irp_seip = false;
+    bool platform_irp_stip = false;
+    bool platform_irp_vseip = false;
+    bool platform_irp_vstip = false;
+    bool lcofi_req = false;
+};
+
 class DifftestRef {
 public:
   DifftestRef();
@@ -131,6 +143,7 @@ public:
   int store_commit(uint64_t *addr, uint64_t *data, uint8_t *mask);
   void raise_intr(uint64_t no);
   void display();
+  void update_mip(void *non_reg_interrupt_pending);
   void update_dynamic_config(void* config) {
 #ifdef RISCV_ENABLE_COMMITLOG
   p->enable_log_commits();
