@@ -77,7 +77,7 @@
     SDTRIG_ISA_STRING \
     "_zba_zbb_zbc_zbs_zbkb_zbkc_zbkx" \
     "_zknd_zkne_zknh_zksed_zksh" \
-    "_zfa_zfhmin" \
+    "_zfa_zfh_zvfh" \
     "_svinval_sscofpmf" \
     "_svpbmt" \
     "_zicbom_zicboz"
