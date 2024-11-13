@@ -1740,7 +1740,7 @@ bool henvcfg_csr_t::unlogged_write(const reg_t val) noexcept {
 }
 
 stimecmp_csr_t::stimecmp_csr_t(processor_t* const proc, const reg_t addr, const reg_t imask):
-  basic_csr_t(proc, addr, 0), intr_mask(imask) {
+  basic_csr_t(proc, addr, 0xffffffffffffffff), intr_mask(imask) {
 }
 
 bool stimecmp_csr_t::unlogged_write(const reg_t val) noexcept {

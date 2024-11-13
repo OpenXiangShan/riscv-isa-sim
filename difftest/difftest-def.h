@@ -80,7 +80,8 @@
     "_zfa_zfh_zvfh" \
     "_svinval_sscofpmf" \
     "_svpbmt" \
-    "_zicbom_zicboz"
+    "_zicbom_zicboz" \
+    "_sstc"
 
 #define CONFIG_MEMORY_SIZE     (16 * 1024 * 1024 * 1024UL)
 #define CONFIG_FLASH_BASE      0x10000000UL
