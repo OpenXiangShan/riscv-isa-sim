@@ -81,7 +81,8 @@
     "_svinval_sscofpmf" \
     "_svpbmt" \
     "_zicbom_zicboz" \
-    "_sstc"
+    "_sstc" \
+    "_smrnmi_smdbltrp_ssdbltrp" \
 
 #define CONFIG_MEMORY_SIZE     (16 * 1024 * 1024 * 1024UL)
 #define CONFIG_FLASH_BASE      0x10000000UL

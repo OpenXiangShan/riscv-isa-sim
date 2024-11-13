@@ -394,6 +394,10 @@ void DifftestRef::raise_intr(uint64_t no) {
   }
 }
 
+bool DifftestRef::raise_critical_error() {
+  return state->critical_error;
+}
+
 void DifftestRef::update_mip(void *non_reg_interrupt_pending) {
   auto n = (DifftestNonRegInterruptPending *) non_reg_interrupt_pending;
   state->mip->backdoor_write_with_mask(MIP_MTIP, n->platform_irp_mtip ? MIP_MTIP : 0);
@@ -566,6 +570,10 @@ void difftest_init(int port) {
 
 void difftest_raise_intr(uint64_t NO) {
   ref->raise_intr(NO);
+}
+
+bool difftest_raise_critical_error() {
+  return ref->raise_critical_error();
 }
 
 void isa_reg_display() {

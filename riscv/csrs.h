@@ -271,6 +271,7 @@ typedef std::shared_ptr<mstatus_csr_t> mstatus_csr_t_p;
 class mnstatus_csr_t final: public basic_csr_t {
  public:
   mnstatus_csr_t(processor_t* const proc, const reg_t addr);
+  bool bare_write(const reg_t val) noexcept;
  protected:
   virtual bool unlogged_write(const reg_t val) noexcept override;
 };
@@ -550,6 +551,8 @@ class wide_counter_csr_t: public csr_t {
 };
 
 typedef std::shared_ptr<wide_counter_csr_t> wide_counter_csr_t_p;
+
+typedef std::shared_ptr<mnstatus_csr_t> mnstatus_csr_t_p;
 
 class time_counter_csr_t: public csr_t {
  public:
