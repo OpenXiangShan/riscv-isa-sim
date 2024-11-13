@@ -142,6 +142,7 @@ public:
   void debug_memcpy_from_dut(reg_t dest, void* src, size_t n);
   int store_commit(uint64_t *addr, uint64_t *data, uint8_t *mask);
   void raise_intr(uint64_t no);
+  bool raise_critical_error();
   void display();
   void update_mip(void *non_reg_interrupt_pending);
   void update_dynamic_config(void* config) {

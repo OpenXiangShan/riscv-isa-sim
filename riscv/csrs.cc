@@ -598,18 +598,31 @@ reg_t mstatus_csr_t::compute_mstatus_initial_value() const noexcept {
          | (proc->extension_enabled_const('U') && (proc->get_const_xlen() != 32) ? set_field((reg_t)0, MSTATUS_UXL, xlen_to_uxl(proc->get_const_xlen())) : 0)
          | (proc->extension_enabled_const('S') && (proc->get_const_xlen() != 32) ? set_field((reg_t)0, MSTATUS_SXL, xlen_to_uxl(proc->get_const_xlen())) : 0)
          | (proc->get_mmu()->is_target_big_endian() ? big_endian_bits : 0)
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+         | 0
+#else
          | (proc->extension_enabled(EXT_SMDBLTRP) ? MSTATUS_MDT : 0)
+#endif
          | 0;  // initial value for mstatus
 }
 
 // implement class mnstatus_csr_t
 mnstatus_csr_t::mnstatus_csr_t(processor_t* const proc, const reg_t addr):
-  basic_csr_t(proc, addr, 0) {
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+  basic_csr_t(proc, addr, MNSTATUS_NMIE)
+#else
+  basic_csr_t(proc, addr, 0)
+#endif
+  {
 }
 
 bool mnstatus_csr_t::unlogged_write(const reg_t val) noexcept {
   // NMIE can be set but not cleared
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+  const reg_t mask = MNSTATUS_NMIE
+#else
   const reg_t mask = (~read() & MNSTATUS_NMIE)
+#endif
                    | (proc->extension_enabled('H') ? MNSTATUS_MNPV : 0)
                    | MNSTATUS_MNPP;
 
@@ -618,6 +631,10 @@ bool mnstatus_csr_t::unlogged_write(const reg_t val) noexcept {
   const reg_t new_mnstatus = (read() & ~mask) | (adjusted_val & mask);
 
   return basic_csr_t::unlogged_write(new_mnstatus);
+}
+
+bool mnstatus_csr_t::bare_write(const reg_t val) noexcept {
+  return basic_csr_t::unlogged_write(val);
 }
 
 // implement class rv32_low_csr_t
