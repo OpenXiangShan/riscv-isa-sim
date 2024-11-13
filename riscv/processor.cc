@@ -463,7 +463,7 @@ void processor_t::take_trap(trap_t& t, reg_t epc)
   // An unexpected trap - a trap when SDT is 1 - traps to M-mode
   if ((state.prv <= PRV_S && bit < max_xlen) &&
       (((vsdeleg >> bit) & 1)  || ((hsdeleg >> bit) & 1))) {
-    reg_t s = curr_virt ? state.nonvirtual_sstatus->read() : state.sstatus->read();
+    reg_t s = state.sstatus->read();
     supv_double_trap = get_field(s, MSTATUS_SDT);
     if (supv_double_trap)
       vsdeleg = hsdeleg = 0;
@@ -534,17 +534,38 @@ void processor_t::take_trap(trap_t& t, reg_t epc)
 
     reg_t s = state.mstatus->read();
     if ( extension_enabled(EXT_SMDBLTRP)) {
-      if (get_field(s, MSTATUS_MDT) || !nmie) {
+      bool m_double_trap = get_field(s, MSTATUS_MDT);
+      if (!nmie) {
         // Critical error - Double trap in M-mode or trap when nmie is 0
         // RNMI is not modeled else double trap in M-mode would trap to
         // RNMI handler instead of leading to a critical error
         state.critical_error = 1;
         return;
       }
-      s = set_field(s, MSTATUS_MDT, 1);
+      if (m_double_trap) {
+        state.pc = trap_handler_address;
+        reg_t mnstatus_val = state.mnstatus->read();
+        mnstatus_val = set_field(mnstatus_val, MNSTATUS_MNPP, state.prv);
+        mnstatus_val = set_field(mnstatus_val, MNSTATUS_MNPV, curr_virt);
+        mnstatus_val = set_field(mnstatus_val, MNSTATUS_NMIE, 0);
+        state.mnstatus->bare_write(mnstatus_val);
+#ifdef CPU_ROCKET_CHIP
+        state.mnepc->write(encode_vaddr(epc));
+#else
+        state.mnepc->write(epc);
+#endif
+        state.mncause->write(t.cause());
+        set_privilege(PRV_M, false);
+        return;
+      } else {
+        s = set_field(s, MSTATUS_MDT, 1);
+      }
     }
-
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+    state.pc = trap_handler_address;
+#else
     state.pc = !nmie ? rnmi_trap_handler_address : trap_handler_address;
+#endif
 #ifdef CPU_ROCKET_CHIP
     state.mepc->write(encode_vaddr(epc));
 #else
