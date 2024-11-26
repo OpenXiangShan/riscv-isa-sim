@@ -1761,8 +1761,11 @@ stimecmp_csr_t::stimecmp_csr_t(processor_t* const proc, const reg_t addr, const 
 }
 
 bool stimecmp_csr_t::unlogged_write(const reg_t val) noexcept {
+  // When difftesting, ref should never generate any time interrupt.
+#ifndef DIFFTEST
   const reg_t mask = ((state->menvcfg->read() & MENVCFG_STCE) ? MIP_STIP : 0) | ((state->henvcfg->read() & HENVCFG_STCE) ? MIP_VSTIP : 0);
   state->mip->backdoor_write_with_mask(mask, state->time->read() >= val ? intr_mask : 0);
+#endif // DIFFTEST
   return basic_csr_t::unlogged_write(val);
 }
 
