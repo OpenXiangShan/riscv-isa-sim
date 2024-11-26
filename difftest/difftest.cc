@@ -380,8 +380,10 @@ void DifftestRef::raise_intr(uint64_t no) {
     p->halt_request = p->HR_NONE;
   } else {
     uint64_t mip_bit = 0x1UL << (no & 0xf);
-    bool is_timer_interrupt = mip_bit & 0xa0UL;
-    bool is_external_interrupt = mip_bit & 0xb00UL;
+    bool is_timer_interrupt = mip_bit & 0xe0UL;
+    // 0xe0: 5 (Supervisor), 6 (Virtual supervisor), 7 (Machine)
+    bool is_external_interrupt = mip_bit & 0x1e00UL;
+    // 0x1e00: 9 (Supervisor), 10 (Virtual supervisor), 11 (Machine), 12 (Supervisor guest)
     bool from_outside = !(mip_bit & state->mip->read());
     bool external_set = (is_timer_interrupt || is_external_interrupt) && from_outside;
     if (external_set) {
