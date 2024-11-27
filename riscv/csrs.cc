@@ -501,10 +501,21 @@ vsstatus_csr_t::vsstatus_csr_t(processor_t* const proc, const reg_t addr):
 
 bool vsstatus_csr_t::unlogged_write(const reg_t val) noexcept {
   const reg_t hDTE = (state->henvcfg->read() & HENVCFG_DTE);
-  const reg_t adj_write_mask = sstatus_write_mask & ~(hDTE ? 0 : SSTATUS_SDT);
+  const reg_t adj_write_mask =
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+    sstatus_write_mask;
+#else
+    sstatus_write_mask & ~(hDTE ? 0 : SSTATUS_SDT);
+#endif
   reg_t newval = (this->val & ~adj_write_mask) | (val & adj_write_mask);
+  bool write_sdt =
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+    newval & SSTATUS_SDT && hDTE;
+#else
+    (newval & SSTATUS_SDT);
+#endif
 
-  newval = (newval & SSTATUS_SDT) ? (newval & ~SSTATUS_SIE) : newval;
+  newval = (write_sdt) ? (newval & ~SSTATUS_SIE) : newval;
 
   if (state->v) maybe_flush_tlb(newval);
   this->val = adjust_sd(newval);
@@ -527,9 +538,7 @@ bool sstatus_proxy_csr_t::unlogged_write(const reg_t val) noexcept {
   const reg_t mDTE = (state->menvcfg->read() & MENVCFG_DTE);
   const reg_t adj_write_mask = sstatus_write_mask & ~(mDTE ? 0 : SSTATUS_SDT);
   reg_t new_mstatus = (mstatus->read() & ~adj_write_mask) | (val & adj_write_mask);
-
   new_mstatus = (new_mstatus & SSTATUS_SDT) ? (new_mstatus & ~SSTATUS_SIE) : new_mstatus;
-
   // On RV32 this will only log the low 32 bits, so make sure we're
   // not modifying anything in the upper 32 bits.
   assert((adj_write_mask & 0xffffffffU) == adj_write_mask);
@@ -580,9 +589,8 @@ bool mstatus_csr_t::unlogged_write(const reg_t val) noexcept {
   new_mstatus ^= new_mstatus & (0x3 << 13); // FS is always zero
 #else
   reg_t new_mstatus = (read() & ~mask) | (adjusted_val & mask);
-  if (new_mstatus & MSTATUS_MDT) {
-  new_mstatus = new_mstatus & ~MSTATUS_MIE;
-  }
+  new_mstatus = (new_mstatus & MSTATUS_MDT) ? (new_mstatus & ~MSTATUS_MIE) : new_mstatus;
+  new_mstatus = (new_mstatus & MSTATUS_SDT) ? (new_mstatus & ~MSTATUS_SIE) : new_mstatus;
 #endif
   maybe_flush_tlb(new_mstatus);
   this->val = adjust_sd(new_mstatus);
