@@ -78,6 +78,7 @@
     "_zba_zbb_zbc_zbs_zbkb_zbkc_zbkx" \
     "_zimop_zcmop_zcb" \
     "_zknd_zkne_zknh_zksed_zksh" \
+    "_zvbb" \
     "_zfa_zfh_zvfh" \
     "_svinval_sscofpmf" \
     "_svpbmt" \
