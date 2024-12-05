@@ -331,6 +331,14 @@ void mmu_t::store_slow_path(reg_t original_addr, reg_t len, const uint8_t* bytes
       throw trap_store_access_fault(gva, transformed_addr, 0, 0);
 
     reg_t len_page0 = std::min(len, PGSIZE - transformed_addr % PGSIZE);
+    
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+    if (len_page0 != len){
+      store_slow_path_intrapage(len_page0, bytes, access_info, false);
+      store_slow_path_intrapage(len - len_page0, bytes + len_page0, access_info.split_misaligned_access(len_page0), false);
+    }
+#endif // defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+
     store_slow_path_intrapage(len_page0, bytes, access_info, actually_store);
     if (len_page0 != len)
       store_slow_path_intrapage(len - len_page0, bytes + len_page0, access_info.split_misaligned_access(len_page0), actually_store);
