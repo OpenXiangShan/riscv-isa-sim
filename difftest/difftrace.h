@@ -4,6 +4,7 @@
 #include <bits/stdc++.h>
 #include <queue>
 #include <unordered_set>
+#include <algorithm>
 #include "difftest-def.h"
 
 class store_trace_t {
@@ -106,8 +107,50 @@ private:
       do_trace = false;
 #endif
       if (do_trace) {
+
+#ifdef CPU_XIANGSHAN
+        bool store_miss_align = (paddr & (len - 1)) != 0;
+
+        if (store_miss_align) {
+#define LIMITING_SHIFT(data) std::min((uint64_t)63ULL, (uint64_t)data)
+
+          bool cross_access_width = ((paddr >> 4) & 1ULL) == (((paddr + len - 1) >> 4) & 1ULL);
+          uint64_t st_mask = (len == 1) ? 0x1ULL : (len == 2) ? 0x3ULL : (len == 4) ? 0xfULL : (len == 8) ? 0xffULL : 0xdeadbeefULL;
+          uint64_t st_data_mask = (len == 1) ? 0xffULL : (len == 2) ? 0xffffULL : (len == 4) ? 0xffffffffULL : (len == 8) ? 0xffffffffffffffffULL : 0xdeadbeefULL;
+
+          if (cross_access_width) {
+            uint64_t inside_addr = paddr - (paddr % 16ULL);
+            uint64_t inside_data = (paddr % 16ULL) > 8 ? 0 : (data & st_data_mask) << LIMITING_SHIFT((paddr % 16ULL) << 3);
+            uint8_t  inside_mask = (st_mask << (paddr % 16ULL)) & 0xffULL;
+            store_trace_t inside_trace{inside_addr, inside_data, inside_mask};
+            store_trace.push(inside_trace);
+          } 
+          else {
+          uint64_t low_addr  = paddr - (paddr % 8ULL);
+          uint64_t high_addr = paddr - (paddr % 16ULL) + 16ULL;
+
+          uint64_t low_data  = (data & (st_data_mask >> ((paddr % len) << 3))) << LIMITING_SHIFT((8 - len + (paddr % len)) << 3);
+          uint64_t high_data = data >> LIMITING_SHIFT((len - (paddr % len)) << 3) & (st_data_mask >> LIMITING_SHIFT((len - (paddr % len)) << 3));;
+
+          uint8_t low_mask  = (st_mask >> (paddr % len)) << LIMITING_SHIFT(8 - len + (paddr % len));
+          uint8_t high_mask = st_mask >> (len - (paddr % len));
+
+          store_trace_t low_trace {low_addr, low_data, low_mask};
+          store_trace_t high_trace{high_addr, high_data, high_mask};
+
+          store_trace.push(low_trace);
+          store_trace.push(high_trace);
+          }
+        } 
+        else {
+          store_trace_t trace{paddr, data, len};
+          store_trace.push(trace);
+        }
+#else
         store_trace_t trace{paddr, data, len};
         store_trace.push(trace);
+#endif // CPU_XIANGSHAN
+
       }
       is_amo = false;
     }
