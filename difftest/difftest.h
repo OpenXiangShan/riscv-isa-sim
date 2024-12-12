@@ -143,6 +143,7 @@ public:
   int store_commit(uint64_t *addr, uint64_t *data, uint8_t *mask);
   void raise_intr(uint64_t no);
   bool raise_critical_error();
+  void dirty_fsvs(uint64_t dirties);
   void display();
   void update_mip(void *non_reg_interrupt_pending);
   void update_dynamic_config(void* config) {
