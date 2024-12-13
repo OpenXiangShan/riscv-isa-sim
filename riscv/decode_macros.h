@@ -184,6 +184,14 @@ static inline bool is_aligned(const unsigned val, const unsigned pos)
       WRITE_VSTATUS; \
     dirty_vs_state; \
   } while (0);
+#define require_vector_nodirty(alu) \
+  do { \
+    require_vector_vs; \
+    require(!P.VU.vill); \
+    if (alu && !P.VU.vstart_alu) \
+      require(P.VU.vstart->read() == 0); \
+    WRITE_VSTATUS; \
+  } while (0);
 #define require_align(val, pos) require(is_aligned(val, pos))
 #define require_noover(astart, asize, bstart, bsize) \
   require(!is_overlapped(astart, asize, bstart, bsize))

@@ -1,6 +1,10 @@
 // vmpopc rd, vs2, vm
 require(P.VU.vsew >= e8 && P.VU.vsew <= e64);
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN) && defined(CONFIG_NO_DIRTY_VS)
+require_vector_nodirty(true)
+#else
 require_vector(true);
+#endif
 reg_t vl = P.VU.vl->read();
 reg_t rs2_num = insn.rs2();
 require(P.VU.vstart->read() == 0);

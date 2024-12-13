@@ -1,5 +1,9 @@
 // vmv_x_s: rd = vs2[0]
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN) && defined(CONFIG_NO_DIRTY_VS)
+require_vector_nodirty(true)
+#else
 require_vector(true);
+#endif
 require(insn.v_vm() == 1);
 reg_t sew = P.VU.vsew;
 reg_t rs2_num = insn.rs2();

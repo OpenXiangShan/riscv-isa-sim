@@ -1,5 +1,9 @@
 // vfmv_f_s: rd = vs2[0] (rs1=0)
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN) && defined(CONFIG_NO_DIRTY_VS)
+require_vector_nodirty(true)
+#else
 require_vector(true);
+#endif
 require_fp;
 require((P.VU.vsew == e16 && p->extension_enabled(EXT_ZVFH)) ||
         (P.VU.vsew == e32 && p->extension_enabled('F')) ||
