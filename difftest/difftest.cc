@@ -490,6 +490,28 @@ const std::vector<std::pair<reg_t, abstract_device_t*>> DifftestRef::create_devi
   };
 }
 
+void DifftestRef::pmp_cfg_cpy(reg_t *dut, bool direction) {
+  auto xlen = p->get_isa().get_max_xlen();
+  for (int i = 0; i < state->max_pmp; i += xlen / 8) {
+    reg_t addr = CSR_PMPCFG0 + i / 4;
+    if (direction == DIFFTEST_TO_REF) {
+      state->csrmap[addr]->write(dut[addr]);
+    } else {
+      dut[addr] = state->csrmap[addr]->read();
+    }
+  }
+}
+
+void DifftestRef::pmpcpy(reg_t* dut, bool direction) {
+  for (int i = 0; i < CONFIG_PMP_NUM; i++) {
+    if (direction == DIFFTEST_TO_REF) {
+      state->pmpaddr[i]->write(dut[i]);
+    }else{
+      dut[i] = state->pmpaddr[i]->read();
+    }
+  }
+}
+
 sim_t *DifftestRef::create_sim(const cfg_t *cfg) {
   sim_t *s = new sim_t(
     // const cfg_t *cfg,
@@ -548,7 +570,15 @@ void difftest_regcpy(diff_context_t* dut, bool direction, bool on_demand) {
 }
 
 void difftest_csrcpy(void *dut, bool direction) {
+}
 
+
+void difftest_pmpcpy(void *dut, bool direction) {
+  ref->pmpcpy((reg_t*)dut, direction);
+}
+
+void difftest_pmp_cfg_cpy(void *dut, bool direction) {
+  ref->pmp_cfg_cpy((reg_t*)dut, direction);
 }
 
 void difftest_uarchstatus_sync(void *dut) {
