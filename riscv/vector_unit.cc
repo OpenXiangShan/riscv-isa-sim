@@ -30,6 +30,7 @@ void vectorUnit_t::vectorUnit_t::reset()
 reg_t vectorUnit_t::vectorUnit_t::set_vl(int rd, int rs1, reg_t reqVL, reg_t newType)
 {
   int new_vlmul = 0;
+  /* After adding force_override, this judgment will always be true */
   if (vtype->read() != newType || p->get_cfg().force_override) {
     vsew = 1 << (extract64(newType, 3, 3) + 3);
     new_vlmul = int8_t(extract64(newType, 0, 3) << 5) >> 5;
