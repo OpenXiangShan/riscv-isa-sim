@@ -245,7 +245,13 @@ void processor_t::step(size_t n)
 
     try
     {
+#if defined(DIFFTEST)
+      if (check_interrupt) {
+        take_pending_interrupt();
+      }
+#else
       take_pending_interrupt();
+#endif
 
       check_if_lpad_required();
 
