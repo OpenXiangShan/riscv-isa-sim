@@ -31,7 +31,8 @@ SPIKE_LDFLAGS  += -fsanitize-coverage=trace-pc-guard -fsanitize-coverage=pc-tabl
 endif
 
 CONFIGURE_FLAGS = -q CC=$(CC) CXX=$(CXX)         \
-    --with-boost=no	--with-boost-asio=no --with-boost-regex=no \
+    --with-boost=no --with-boost-asio=no --with-boost-regex=no \
+    --enable-varith-agnostic-write-ones                        \
     CFLAGS="$(SPIKE_CFLAGS)" CXXFLAGS="$(SPIKE_CXXFLAGS)"      \
     LDFLAGS="$(SPIKE_LDFLAGS)"
 
