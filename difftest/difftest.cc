@@ -643,8 +643,21 @@ void debug_mem_sync(reg_t addr, void* buf, size_t n) {
   ref->debug_memcpy_from_dut(addr, buf, n);
 }
 
-void difftest_load_flash(const uint8_t *flash_bin, size_t size) {
+void difftest_load_flash_v2(const uint8_t *flash_bin, size_t size) {
   ref->flash_cpy_from_dut(flash_bin, size);
+}
+
+void difftest_load_flash(const char *flash_bin_file, size_t size) {
+  if (flash_bin_file) {
+    std::ifstream file(flash_bin_file, std::ios::binary);
+    if (!file) {
+      std::cout << "Error loading flash file " << flash_bin_file << std::endl;
+      assert(0);
+    }
+    std::vector<uint8_t> flash_data(size);
+    file.read(reinterpret_cast<char*>(flash_data.data()), size);
+    difftest_load_flash_v2(flash_data.data(), size);
+  }
 }
 
 void difftest_set_mhartid(int mhartid) {
