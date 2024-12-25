@@ -110,6 +110,8 @@ public:
 public:
 #endif
   virtual char* addr_to_mem(reg_t paddr) override;
+  virtual bool set_mmio(reg_t paddr, size_t len, const uint8_t* bytes);
+
 #if defined(DIFFTEST)
 private:
 #endif

@@ -32,6 +32,10 @@ class rom_device_t : public abstract_device_t {
   bool load(reg_t addr, size_t len, uint8_t* bytes) override;
   bool store(reg_t addr, size_t len, const uint8_t* bytes) override;
   const std::vector<char>& contents() { return data; }
+
+  // 提供访问器
+  std::vector<char>& get_data() { return data; }
+
  private:
   std::vector<char> data;
 };

@@ -357,6 +357,11 @@ bool sim_t::mmio_store(reg_t paddr, size_t len, const uint8_t* bytes)
   return bus.store(paddr, len, bytes);
 }
 
+bool sim_t::set_mmio(reg_t paddr, size_t len, const uint8_t* bytes)
+{
+  return mmio_store(paddr, len, bytes);
+}
+
 void sim_t::set_rom()
 {
   const int reset_vec_size = 8;

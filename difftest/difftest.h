@@ -130,6 +130,17 @@ class DifftestNonRegInterruptPending {
     bool lcofi_req = false;
 };
 
+class custom_rom_device_t : public rom_device_t {
+  public:
+    custom_rom_device_t(std::vector<char> data) : rom_device_t(data) {}
+    // support full override flash only
+    bool store(reg_t addr, size_t len, const uint8_t* bytes) override {
+      auto &rom_data = get_data();
+      rom_data.assign(bytes, bytes + len);
+      return true;
+    }
+};
+
 class DifftestRef {
 public:
   DifftestRef();
@@ -141,6 +152,7 @@ public:
   void get_regs(diff_context_t *ctx);
   void set_regs(diff_context_t *ctx, bool on_demand);
   void memcpy_from_dut(reg_t dest, void* src, size_t n);
+  void flash_cpy_from_dut(const uint8_t* src, size_t n);
   void debug_memcpy_from_dut(reg_t dest, void* src, size_t n);
   int store_commit(uint64_t *addr, uint64_t *data, uint8_t *mask);
   void raise_intr(uint64_t no);
