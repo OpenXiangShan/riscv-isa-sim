@@ -352,6 +352,11 @@ void DifftestRef::memcpy_from_dut(reg_t dest, void* src, size_t n) {
   }
 }
 
+void DifftestRef::flash_cpy_from_dut(const uint8_t* src, size_t n) {
+    sim->set_mmio(CONFIG_FLASH_BASE, n, src);
+    p->get_mmu()->flush_icache();
+}
+
 void DifftestRef::debug_memcpy_from_dut(reg_t dest, void* src, size_t n) {
 #ifdef CONFIG_DIFF_DEBUG_MODE
   // addr is absolute physical addr
@@ -486,7 +491,7 @@ const std::vector<std::pair<reg_t, abstract_device_t*>> DifftestRef::create_devi
     std::make_pair(reg_t(DM_BASE_ADDR), new dummy_debug_t),
 #endif
 #if defined(CONFIG_FLASH_BASE) && defined(CONFIG_FLASH_SIZE)
-    std::make_pair(reg_t(CONFIG_FLASH_BASE), new rom_device_t(rom_data)),
+    std::make_pair(reg_t(CONFIG_FLASH_BASE), new custom_rom_device_t(rom_data)),
 #endif
   };
 }
@@ -638,8 +643,8 @@ void debug_mem_sync(reg_t addr, void* buf, size_t n) {
   ref->debug_memcpy_from_dut(addr, buf, n);
 }
 
-void difftest_load_flash(void *flash_bin, size_t size) {
-
+void difftest_load_flash(const uint8_t *flash_bin, size_t size) {
+  ref->flash_cpy_from_dut(flash_bin, size);
 }
 
 void difftest_set_mhartid(int mhartid) {
