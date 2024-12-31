@@ -9,10 +9,14 @@ on:
 jobs:
   build:
     name: Build spike-so for difftest
-    runs-on: ubuntu-latest
     strategy:
       matrix:
         cpu: [xiangshan, nutshell, rocket_chip]
+        os: [ubuntu-20.04, ubuntu-22.04, ubuntu-24.04]
+        toolchain:
+          - { cc: gcc, cxx: g++ }
+          - { cc: clang, cxx: clang++ }
+    runs-on: ${{ matrix.os }}
     continue-on-error: false
     timeout-minutes: 30
     steps:
@@ -25,10 +29,12 @@ jobs:
       - name: build spike-so
         run: |
           BUILD_CPU=${{ matrix.cpu }}
-          make -C difftest CPU=${BUILD_CPU^^} -j4
+          make -C difftest CPU=${BUILD_CPU^^} -j4 \
+            CC=${{ matrix.toolchain.cc }}         \
+            CXX=${{ matrix.toolchain.cxx }}
 
       - name: archive spike-so artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: riscv64-${{ matrix.cpu }}-spike-so
+          name: riscv64-${{ matrix.cpu }}-spike-so-${{ matrix.os }}-${{ matrix.toolchain.cc }}
           path: difftest/build/riscv64-spike-so
