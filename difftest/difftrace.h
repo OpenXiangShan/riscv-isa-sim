@@ -173,7 +173,7 @@ public:
   bool sc_failed = false;
 
   void difftest_log(const char *__restrict __fmt, ...) {
-    if (unlikely(enable_difftest_logs)) {
+    if (enable_difftest_logs) [[unlikely]] {
       va_list args;
       va_start(args, __fmt);
       fprintf(stderr, "[Spike] ");
