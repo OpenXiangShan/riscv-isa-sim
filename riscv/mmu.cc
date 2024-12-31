@@ -333,10 +333,10 @@ void mmu_t::store_slow_path(reg_t original_addr, reg_t len, const uint8_t* bytes
     reg_t len_page0 = std::min(len, PGSIZE - transformed_addr % PGSIZE);
     
 #if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
-    if (len_page0 != len){
-      store_slow_path_intrapage(len_page0, bytes, access_info, false);
-      store_slow_path_intrapage(len - len_page0, bytes + len_page0, access_info.split_misaligned_access(len_page0), false);
-    }
+    if (len_page0 != len) {
+      store_slow_path_intrapage(len_page0, bytes, access_info, false);
+      store_slow_path_intrapage(len - len_page0, bytes + len_page0, access_info.split_misaligned_access(len_page0), false);
+    }
 #endif // defined(DIFFTEST) && defined(CPU_XIANGSHAN)
 
     store_slow_path_intrapage(len_page0, bytes, access_info, actually_store);
