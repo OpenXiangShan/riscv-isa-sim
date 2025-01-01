@@ -10,8 +10,8 @@ SPIKE_PATH     = $(abspath ..)
 SPIKE_TARGET   = $(BUILD_DIR)/spike
 SPIKE_MAKEFILE = $(BUILD_DIR)/Makefile
 
-SPIKE_CFLAGS    = -O3 -DDIFFTEST
-SPIKE_CXXFLAGS  = -O3 -DDIFFTEST -Wno-c99-designator
+SPIKE_CFLAGS    = -O3 -DDIFFTEST -include $(abspath .)/difftest-def.h
+SPIKE_CXXFLAGS  = -O3 -DDIFFTEST -include $(abspath .)/difftest-def.h -Wno-c99-designator
 SPIKE_LDFLAGS   =
 
 ifneq ($(CPU),)
