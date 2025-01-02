@@ -451,6 +451,9 @@ public:
 
   vectorUnit_t VU;
   triggers::module_t TM;
+#if defined(DIFFTEST)
+  bool check_interrupt = false;
+#endif
 };
 
 #endif

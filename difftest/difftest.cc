@@ -393,11 +393,10 @@ void DifftestRef::raise_intr(uint64_t no) {
     bool external_set = (is_timer_interrupt || is_external_interrupt) && from_outside;
     if (external_set) {
       state->mip->backdoor_write_with_mask(mip_bit, mip_bit);
-      step(1);
-      state->mip->backdoor_write_with_mask(mip_bit, ~mip_bit);
-    } else {
-      step(1);
     }
+    p->check_interrupt = true;
+    step(1);
+    p->check_interrupt = false;
   }
 }
 
