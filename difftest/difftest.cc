@@ -391,11 +391,14 @@ void DifftestRef::raise_intr(uint64_t no) {
     // 0x1e00: 9 (Supervisor), 10 (Virtual supervisor), 11 (Machine), 12 (Supervisor guest)
     bool from_outside = !(mip_bit & state->mip->read());
     bool external_set = (is_timer_interrupt || is_external_interrupt) && from_outside;
+    p->check_interrupt = true;
     if (external_set) {
       state->mip->backdoor_write_with_mask(mip_bit, mip_bit);
+      step(1);
+      state->mip->backdoor_write_with_mask(mip_bit, ~mip_bit);
+    } else {
+      step(1);
     }
-    p->check_interrupt = true;
-    step(1);
     p->check_interrupt = false;
   }
 }
