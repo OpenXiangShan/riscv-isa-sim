@@ -28,6 +28,7 @@ DifftestRef::DifftestRef() :
   sim(create_sim(cfg)),
   p(sim->get_core(0UL)),
   state(p->get_state()) {
+  p->get_mmu()->set_cache_blocksz(CONFIG_BLOCK_SIZE);
 #if CONFIG_PMP_NUM > 0
   p->set_pmp_granularity(1 << CONFIG_PMP_GRAN);
 #endif
