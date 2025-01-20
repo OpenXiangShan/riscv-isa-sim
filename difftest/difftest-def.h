@@ -29,6 +29,7 @@
 #define CONFIG_MEMORY_SIZE     (2 * 1024 * 1024 * 1024UL)
 #define CONFIG_FLASH_BASE      0x40000000UL
 #define CONFIG_FLASH_SIZE      0x1000UL
+#define CONFIG_BLOCK_SIZE      64
 #define CONFIG_PMP_NUM         0
 #define CONFIG_PMP_MAX_NUM     0
 #define CONFIG_TRIGGER_NUM     0
@@ -93,6 +94,7 @@
 #define CONFIG_MEMORY_SIZE     (16 * 1024 * 1024 * 1024UL)
 #define CONFIG_FLASH_BASE      0x10000000UL
 #define CONFIG_FLASH_SIZE      0x10000000UL
+#define CONFIG_BLOCK_SIZE      64
 #define CONFIG_PMP_NUM         16
 #define CONFIG_PMP_MAX_NUM     16
 #define CONFIG_PMP_GRAN        12
@@ -106,6 +108,7 @@
 #define CONFIG_MEMORY_SIZE     (2 * 1024 * 1024 * 1024UL)
 #define CONFIG_FLASH_BASE      0x10000000UL
 #define CONFIG_FLASH_SIZE      0x10000UL
+#define CONFIG_BLOCK_SIZE      64
 #define CONFIG_PMP_NUM         0
 #define CONFIG_PMP_MAX_NUM     64
 #define CONFIG_TRIGGER_NUM     0
