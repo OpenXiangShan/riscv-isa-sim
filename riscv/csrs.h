@@ -508,12 +508,14 @@ class base_atp_csr_t: public basic_csr_t {
   virtual bool unlogged_write(const reg_t val) noexcept override;
  private:
   reg_t compute_new_satp(reg_t val) const noexcept;
+  virtual reg_t compute_rv64_ppn_mask() const noexcept;
 };
 
 class satp_csr_t: public base_atp_csr_t {
  public:
   satp_csr_t(processor_t* const proc, const reg_t addr);
   virtual void verify_permissions(insn_t insn, bool write) const override;
+  virtual reg_t compute_rv64_ppn_mask() const noexcept override;
 };
 
 typedef std::shared_ptr<satp_csr_t> satp_csr_t_p;
