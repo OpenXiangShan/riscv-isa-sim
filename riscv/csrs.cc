@@ -1098,20 +1098,7 @@ bool base_atp_csr_t::satp_valid(reg_t val) const noexcept {
 }
 
 reg_t base_atp_csr_t::compute_new_satp(reg_t val) const noexcept {
-  reg_t rv64_ppn_mask;
-  switch(get_field(state->hgatp->read(), HGATP64_MODE)) {
-    case HGATP_MODE_OFF:
-      rv64_ppn_mask = (reg_t(1) << (48 - PGSHIFT)) - 1;
-      break;
-    case HGATP_MODE_SV39X4:
-      rv64_ppn_mask = (reg_t(1) << (41 - PGSHIFT)) - 1;
-      break;
-    case HGATP_MODE_SV48X4:
-      rv64_ppn_mask = (reg_t(1) << (50 - PGSHIFT)) - 1;
-      break;
-    default:
-      assert(0);
-  }
+  reg_t rv64_ppn_mask = compute_rv64_ppn_mask();
   reg_t mode_mask = proc->get_xlen() == 32 ? SATP32_MODE : SATP64_MODE;
   reg_t asid_mask_if_enabled = proc->get_xlen() == 32 ? SATP32_ASID : SATP64_ASID;
   reg_t asid_mask = proc->supports_impl(IMPL_MMU_ASID) ? asid_mask_if_enabled : 0;
@@ -1122,6 +1109,24 @@ reg_t base_atp_csr_t::compute_new_satp(reg_t val) const noexcept {
   return (new_mask & val) | (old_mask & read());
 }
 
+reg_t base_atp_csr_t::compute_rv64_ppn_mask() const noexcept {
+  reg_t rv64_ppn_mask;
+  switch(get_field(state->hgatp->read(), HGATP64_MODE)) {
+    case HGATP_MODE_OFF:
+      rv64_ppn_mask = (reg_t(1) << (MAX_PADDR_BITS - PGSHIFT)) - 1;
+      break;
+    case HGATP_MODE_SV39X4:
+      rv64_ppn_mask = (reg_t(1) << (41 - PGSHIFT)) - 1;
+      break;
+    case HGATP_MODE_SV48X4:
+      rv64_ppn_mask = (reg_t(1) << (50 - PGSHIFT)) - 1;
+      break;
+    default:
+      assert(0);
+  }
+  return rv64_ppn_mask;
+}
+
 satp_csr_t::satp_csr_t(processor_t* const proc, const reg_t addr):
   base_atp_csr_t(proc, addr) {
 }
@@ -1130,6 +1135,11 @@ void satp_csr_t::verify_permissions(insn_t insn, bool write) const {
   base_atp_csr_t::verify_permissions(insn, write);
   if (get_field(state->mstatus->read(), MSTATUS_TVM))
     require(state->prv == PRV_M);
+}
+
+reg_t satp_csr_t::compute_rv64_ppn_mask() const noexcept {
+  reg_t rv64_ppn_mask = (reg_t(1) << (MAX_PADDR_BITS - PGSHIFT)) - 1;
+  return rv64_ppn_mask;
 }
 
 virtualized_satp_csr_t::virtualized_satp_csr_t(processor_t* const proc, satp_csr_t_p orig, csr_t_p virt):
