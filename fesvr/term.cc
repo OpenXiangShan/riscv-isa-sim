@@ -30,7 +30,9 @@ class canonical_termios_t
   bool restore_tios;
 };
 
+#ifndef DIFFTEST
 static canonical_termios_t tios; // exit() will clean up for us
+#endif // !DIFFTEST
 
 int canonical_terminal_t::read()
 {
