@@ -176,10 +176,11 @@ reg_t mcontrol_t::tdata1_read(const processor_t * const proc) const noexcept {
   v = set_field(v, MCONTROL_MASKMAX(xlen), maskmax);
 #if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
   v = set_field(v, CSR_MCONTROL_HIT, 0);
+  v = set_field(v, MCONTROL_SELECT, 0);
 #else
   v = set_field(v, CSR_MCONTROL_HIT, hit);
-#endif
   v = set_field(v, MCONTROL_SELECT, select);
+#endif
   v = set_field(v, MCONTROL_TIMING, timing);
   v = set_field(v, MCONTROL_ACTION, action);
   v = set_field(v, MCONTROL_CHAIN, chain);
@@ -199,10 +200,11 @@ void mcontrol_t::tdata1_write(processor_t * const proc, const reg_t val, const b
   dmode = get_field(val, CSR_MCONTROL_DMODE(xlen));
 #if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
   hit = 0;
+  select = 0;
 #else
   hit = get_field(val, CSR_MCONTROL_HIT);
-#endif
   select = get_field(val, MCONTROL_SELECT);
+#endif
   timing = legalize_timing(val, MCONTROL_TIMING, MCONTROL_SELECT, MCONTROL_EXECUTE, MCONTROL_LOAD);
   action = legalize_action(val, MCONTROL_ACTION, CSR_MCONTROL_DMODE(xlen));
   chain = allow_chain ? get_field(val, MCONTROL_CHAIN) : 0;
@@ -320,10 +322,11 @@ reg_t mcontrol6_t::tdata1_read(const processor_t * const proc) const noexcept {
   tdata1 = set_field(tdata1, CSR_MCONTROL6_VU, proc->extension_enabled('H') ? vu : 0);
 #if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
   tdata1 = set_field(tdata1, CSR_MCONTROL6_HIT0,  0);
+  tdata1 = set_field(tdata1, CSR_MCONTROL6_SELECT, 0);
 #else
   tdata1 = set_field(tdata1, CSR_MCONTROL6_HIT0, hit & 1); // LSB of 2-bit field
-#endif
   tdata1 = set_field(tdata1, CSR_MCONTROL6_SELECT, select);
+#endif
   tdata1 = set_field(tdata1, CSR_MCONTROL6_ACTION, action);
   tdata1 = set_field(tdata1, CSR_MCONTROL6_CHAIN, chain);
   tdata1 = set_field(tdata1, CSR_MCONTROL6_MATCH, match);
@@ -345,10 +348,11 @@ void mcontrol6_t::tdata1_write(processor_t * const proc, const reg_t val, const 
   vu = get_field(val, CSR_MCONTROL6_VU);
 #if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
   hit = (hit_t)0;
+  select = 0;
 #else
   hit = hit_t(2 * get_field(val, CSR_MCONTROL6_HIT1) + get_field(val, CSR_MCONTROL6_HIT0)); // 2-bit field {hit1,hit0}
-#endif
   select = get_field(val, CSR_MCONTROL6_SELECT);
+#endif
   action = legalize_action(val, CSR_MCONTROL6_ACTION, CSR_MCONTROL6_DMODE(xlen));
   chain = allow_chain ? get_field(val, CSR_MCONTROL6_CHAIN) : 0;
   match = legalize_match(get_field(val, CSR_MCONTROL6_MATCH), maskmax6);
