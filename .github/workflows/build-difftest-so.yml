@@ -12,11 +12,44 @@ jobs:
     strategy:
       matrix:
         cpu: [xiangshan, nutshell, rocket_chip]
-        os: [ubuntu-20.04, ubuntu-22.04, ubuntu-24.04]
+        os: [ubuntu-22.04, ubuntu-24.04]
         toolchain:
           - { cc: gcc, cxx: g++ }
           - { cc: clang, cxx: clang++ }
     runs-on: ${{ matrix.os }}
+    continue-on-error: false
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: sudo xargs apt-get install -y < .github/workflows/apt-packages.txt
+
+      - name: build spike-so
+        run: |
+          BUILD_CPU=${{ matrix.cpu }}
+          make -C difftest CPU=${BUILD_CPU^^} -j4 \
+            CC=${{ matrix.toolchain.cc }}         \
+            CXX=${{ matrix.toolchain.cxx }}
+
+      - name: archive spike-so artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: riscv64-${{ matrix.cpu }}-spike-so-${{ matrix.os }}-${{ matrix.toolchain.cc }}
+          path: difftest/build/riscv64-spike-so
+  # fack you why you do not support YAML anchor? 
+  build-on-docker:
+    name: Build spike-so for difftest on docker
+    strategy:
+      matrix:
+        cpu: [xiangshan, nutshell, rocket_chip]
+        os: [ubuntu-20.04]
+        toolchain:
+          - { cc: gcc, cxx: g++ }
+          - { cc: clang, cxx: clang++ }
+    runs-on: ubuntu-latest
+    container: ghcr.io/openxiangshan/${{ matrix.os }}:latest
     continue-on-error: false
     timeout-minutes: 30
     steps:
