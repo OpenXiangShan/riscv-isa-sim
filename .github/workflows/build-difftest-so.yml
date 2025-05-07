@@ -57,7 +57,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Dependencies
-        run: sudo xargs apt-get install -y < .github/workflows/apt-packages.txt
+        run: xargs apt-get install -y < .github/workflows/apt-packages.txt
 
       - name: build spike-so
         run: |
