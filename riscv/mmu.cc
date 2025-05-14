@@ -235,7 +235,13 @@ void mmu_t::load_slow_path_intrapage(reg_t len, uint8_t* bytes, mem_access_info_
     else if (!access_info.flags.is_special_access())
       refill_tlb(addr, paddr, host_addr, LOAD);
 
-  } else if (!mmio_load(paddr, len, bytes)) {
+  } 
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+  else if (access_info.flags.vldst) {
+    throw trap_load_access_fault(access_info.effective_virt, transformed_addr, 0, 0);
+  }
+#endif // defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+  else if (!mmio_load(paddr, len, bytes)) {
     throw trap_load_access_fault(access_info.effective_virt, transformed_addr, 0, 0);
   }
 
@@ -299,7 +305,13 @@ void mmu_t::store_slow_path_intrapage(reg_t len, const uint8_t* bytes, mem_acces
         tracer.trace(paddr, len, STORE);
       else if (!access_info.flags.is_special_access())
         refill_tlb(addr, paddr, host_addr, STORE);
-    } else if (!mmio_store(paddr, len, bytes)) {
+    } 
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+    else if (access_info.flags.vldst)  {
+      throw trap_store_access_fault(access_info.effective_virt, transformed_addr, 0, 0);
+    }
+#endif // defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+    else if (!mmio_store(paddr, len, bytes)) {
       throw trap_store_access_fault(access_info.effective_virt, transformed_addr, 0, 0);
     }
   }
