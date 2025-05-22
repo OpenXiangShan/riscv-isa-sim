@@ -51,7 +51,7 @@ struct xlate_flags_t {
   const bool vldst : 1 {false};
 
   bool is_special_access() const {
-    return forced_virt || hlvx || lr || ss_access || clean_inval || vldst;
+    return forced_virt || hlvx || lr || ss_access || clean_inval;
   }
 };
 
