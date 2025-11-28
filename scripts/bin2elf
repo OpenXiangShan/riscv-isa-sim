@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# bin2elf.sh: 把裸 RISC-V bin 转成适合 Spike（DRAM_BASE=0x80000000）的 ELF
+# 用法: ./bin2elf.sh input.bin output.elf
+
+set -e
+
+if [ "$#" -ne 2 ]; then
+  echo "Usage: $0 <input.bin> <output.elf>"
+  exit 1
+fi
+
+IN_BIN="$1"
+OUT_ELF="$2"
+
+ARCH_TRIPLE="riscv64-unknown-elf"
+BASE_ADDR="0x80000000"
+
+# 工具检查
+for tool in "${ARCH_TRIPLE}-gcc" "${ARCH_TRIPLE}-objdump" readelf; do
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    echo "Error: $tool not found in PATH" >&2
+    exit 1
+  fi
+done
+
+# bin 的绝对路径，给 .incbin 用
+if command -v readlink >/dev/null 2>&1; then
+  ABS_BIN="$(readlink -f "$IN_BIN")"
+elif command -v realpath >/dev/null 2>&1; then
+  ABS_BIN="$(realpath "$IN_BIN")"
+else
+  # 退一步：当前目录 + 相对路径
+  ABS_BIN="$(pwd)/$IN_BIN"
+fi
+
+TMPDIR="$(mktemp -d /tmp/bin2elf.XXXXXX)"
+ASM="${TMPDIR}/wrapper.S"
+LDS="${TMPDIR}/linker.ld"
+
+# 1. wrapper.S：把 bin 直接塞进 .text，从 _start 开始
+cat > "${ASM}" <<EOF
+    .section .text
+    .globl _start
+_start:
+    .align 2
+    .incbin "${ABS_BIN}"
+EOF
+
+# 2. linker.ld：只做一件事——在 0x80000000 放一个 PT_LOAD 的 .text 段
+cat > "${LDS}" <<EOF
+ENTRY(_start)
+
+PHDRS {
+  text PT_LOAD FLAGS(5);   /* R=4 | X=1 */
+}
+
+SECTIONS {
+  . = ${BASE_ADDR};
+
+  .text : {
+    *(.text*)
+  } :text
+
+  /DISCARD/ : {
+    *(.riscv.attributes)
+    *(.comment)
+    *(.eh_frame)
+    *(.eh_frame_hdr)
+  }
+}
+EOF
+
+# 3. 编译 + 链接
+"${ARCH_TRIPLE}-gcc" \
+  -nostdlib -nostartfiles -static \
+  -Wl,-T,"${LDS}" \
+  -o "${OUT_ELF}" \
+  "${ASM}"
+
+# 可选：简单检查一下 Program Headers
+echo "Generated ELF: ${OUT_ELF}"
+echo
+readelf -l "${OUT_ELF}"
+
+# 清理临时目录
+rm -rf "${TMPDIR}"

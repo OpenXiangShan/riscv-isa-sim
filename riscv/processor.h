@@ -435,6 +435,7 @@ private:
 
   // Track repeated executions for processor_t::disasm()
   uint64_t last_pc, last_bits, executions;
+  void detect_nemu_trap(uint64_t insn, uint64_t pc);
 public:
   entropy_source es; // Crypto ISE Entropy source.
 

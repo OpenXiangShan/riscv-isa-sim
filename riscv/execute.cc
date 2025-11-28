@@ -6,6 +6,8 @@
 #include "disasm.h"
 #include "decode_macros.h"
 #include <cassert>
+#include <chrono>
+#include <iomanip>
 
 static void commit_log_reset(processor_t* p)
 {
@@ -284,6 +286,7 @@ void processor_t::step(size_t n)
           insn_fetch_t fetch = mmu->load_insn(pc);
           if (debug && !state.serialized)
             disasm(fetch.insn);
+          detect_nemu_trap(fetch.insn.bits(), pc);
           pc = execute_insn_logged(this, pc, fetch);
           advance_pc();
 
@@ -304,6 +307,7 @@ void processor_t::step(size_t n)
         // Main simulation loop, fast path.
         for (auto ic_entry = _mmu->access_icache(pc); instret < n; instret++) {
           auto fetch = ic_entry->data;
+          detect_nemu_trap(fetch.insn.bits(), pc);
           ic_entry = ic_entry->next;
           auto new_pc = execute_insn_fast(this, pc, fetch);
           if (unlikely(ic_entry->tag != new_pc)) {
@@ -371,4 +375,65 @@ serialize:
 
     n -= instret;
   }
+}
+
+std::string format_with_commas(uint64_t value) {
+    std::string s = std::to_string(value);
+    int n = s.length() - 3;
+    while (n > 0) {
+        s.insert(n, ",");
+        n -= 3;
+    }
+    return s;
+}
+
+#define BLUE  "\033[1;34m"
+#define GREEN "\033[1;32m"
+#define RESET "\033[0m"
+
+void processor_t::detect_nemu_trap(uint64_t insn, uint64_t pc) {
+#ifdef HAS_NEMU_TRAP
+  static auto start_time = std::chrono::high_resolution_clock::now();
+  if ((insn & 0xfff07fff) == 0x6b) {
+    auto rs1 = (insn >> 15) & 0x1f;
+    auto code = state.XPR[rs1];
+    auto trap = code == 0 ? "GOOD" : "BAD";
+    std::cout << BLUE
+              << "[" << __FILE__ << ":" << __LINE__ << "] "
+              << GREEN
+              << "HIT "
+              << trap
+              << " TRAP "
+              << RESET
+              << "at pc = 0x"
+              << std::hex << std::setw(16) << std::setfill('0') << pc
+              << " with exit code = "
+              << std::dec << code
+              << std::endl;
+
+    auto instret = state.minstret->read();
+    std::cout << BLUE
+              << "[" << __FILE__ << ":" << __LINE__ << "] "
+              << BLUE
+              << "total guest instructions = "
+              << format_with_commas(instret)
+              << RESET
+              << std::endl;
+
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+    double seconds = duration / 1000.0;
+    auto sim_speed = static_cast<uint64_t>(instret / seconds);
+    std::cout << BLUE
+              << "[" << __FILE__ << ":" << __LINE__ << "] "
+              << BLUE
+              << "simulation frequency = "
+              << format_with_commas(sim_speed)
+              << " instr/s"
+              << RESET
+              << std::endl;
+
+    exit(code);
+  }
+#endif // HAS_NEMU_TRAP
 }
