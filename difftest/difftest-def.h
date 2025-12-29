@@ -87,6 +87,7 @@
     "_svpbmt" \
     "_zicbom_zicboz" \
     "_sstc" \
+    "_smcntrpmf" \
     "_smrnmi_smdbltrp_ssdbltrp" \
     "_smmpm_smnpm_ssnpm" \
     "_svnapot" \
