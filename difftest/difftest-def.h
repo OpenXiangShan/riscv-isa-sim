@@ -88,6 +88,7 @@
     "_zicbom_zicboz" \
     "_sstc" \
     "_smcntrpmf" \
+    "_smstateen" \
     "_smrnmi_smdbltrp_ssdbltrp" \
     "_smmpm_smnpm_ssnpm" \
     "_svnapot" \
