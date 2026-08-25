@@ -69,6 +69,7 @@
     #define SDTRIG_ISA_STRING ""
 #endif
 
+// Keep this list aligned with NEMU's riscv64-xs-diff-spike_defconfig.
 #define CONFIG_DIFF_ISA_STRING \
     "RV64IMAFDC" \
     RVV_ISA_STRING \
@@ -88,7 +89,6 @@
     "_zicbom_zicboz" \
     "_sstc" \
     "_smcntrpmf" \
-    "_smstateen" \
     "_smrnmi_smdbltrp_ssdbltrp" \
     "_smmpm_smnpm_ssnpm" \
     "_svnapot" \
