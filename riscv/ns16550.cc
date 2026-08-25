@@ -93,8 +93,8 @@ void ns16550_t::update_interrupt(void)
   uint8_t interrupts = 0;
 
   /* Handle clear rx */
-  if (lcr & UART_FCR_CLEAR_RCVR) {
-    lcr &= ~UART_FCR_CLEAR_RCVR;
+  if (fcr & UART_FCR_CLEAR_RCVR) {
+    fcr &= ~UART_FCR_CLEAR_RCVR;
     while (!rx_queue.empty()) {
       rx_queue.pop();
     }
@@ -102,8 +102,8 @@ void ns16550_t::update_interrupt(void)
   }
 
   /* Handle clear tx */
-  if (lcr & UART_FCR_CLEAR_XMIT) {
-    lcr &= ~UART_FCR_CLEAR_XMIT;
+  if (fcr & UART_FCR_CLEAR_XMIT) {
+    fcr &= ~UART_FCR_CLEAR_XMIT;
     lsr |= UART_LSR_TEMT | UART_LSR_THRE;
   }
 
@@ -328,7 +328,7 @@ void ns16550_t::tick(reg_t UNUSED rtc_ticks)
   update_interrupt();
 }
 
-std::string ns16550_generate_dts(const sim_t* sim, const std::vector<std::string>& UNUSED sargs)
+std::string ns16550_generate_dts(const sim_t* sim, const std::vector<std::string>& sargs UNUSED)
 {
   std::stringstream s;
   s << std::hex
@@ -348,7 +348,7 @@ std::string ns16550_generate_dts(const sim_t* sim, const std::vector<std::string
   return s.str();
 }
 
-ns16550_t* ns16550_parse_from_fdt(const void* fdt, const sim_t* sim, reg_t* base, const std::vector<std::string>& UNUSED sargs)
+ns16550_t* ns16550_parse_from_fdt(const void* fdt, const sim_t* sim, reg_t* base, const std::vector<std::string>& sargs UNUSED)
 {
   uint32_t ns16550_shift, ns16550_io_width, ns16550_int_id;
   if (fdt_parse_ns16550(fdt, base,
@@ -361,4 +361,4 @@ ns16550_t* ns16550_parse_from_fdt(const void* fdt, const sim_t* sim, reg_t* base
   }
 }
 
-REGISTER_DEVICE(ns16550, ns16550_parse_from_fdt, ns16550_generate_dts)
+REGISTER_BUILTIN_DEVICE(ns16550, ns16550_parse_from_fdt, ns16550_generate_dts)

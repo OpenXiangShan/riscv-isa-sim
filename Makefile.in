@@ -93,7 +93,7 @@ VPATH := $(addprefix $(src_dir)/, $(sprojs_enabled))
 # These all appear on the command line, from lowest precedence to
 # highest.
 
-default-CFLAGS   := -DPREFIX=\"$(prefix)\" -Wall -Wno-unused -Wno-nonportable-include-path -g -O2 -fPIC
+default-CFLAGS   := -DPREFIX=\"$(prefix)\" -Wall -Wno-nonportable-include-path -g -O2 -fPIC
 default-CXXFLAGS := $(default-CFLAGS) -std=c++2a
 
 mcppbs-CPPFLAGS := @CPPFLAGS@
@@ -219,11 +219,11 @@ $(2)_deps := $$(patsubst %.o, %.d, $$($(2)_objs))
 $(2)_deps += $$(patsubst %.o, %.d, $$($(2)_c_objs))
 $(2)_deps += $$(patsubst %.h, %.h.d, $$($(2)_precompiled_hdrs))
 $$($(2)_pch) : %.h.gch : %.h
-	$(COMPILE) -x c++-header $$< -c -o $$@
+	$(COMPILE) -x c++-header $$< -c -o $$@ -MF $$(patsubst %.gch,%.d,$$@)
 $$($(2)_objs) : %.o : %.cc $$($(2)_gen_hdrs) $$($(2)_pch)
-	$(COMPILE) $(if $(HAVE_CLANG_PCH), $$(if $$($(2)_pch), -include-pch $$($(2)_pch))) $$($(2)_CFLAGS) -c $$<
+	$(COMPILE) $(if $(HAVE_CLANG_PCH), $$(if $$($(2)_pch), -include-pch $$($(2)_pch))) $$($(2)_CFLAGS) -c $$< -o $$@ -MF $$(patsubst %.o,%.d,$$@)
 $$($(2)_c_objs) : %.o : %.c $$($(2)_gen_hdrs)
-	$(COMPILE_C) $$($(2)_CFLAGS) -c $$<
+	$(COMPILE_C) $$($(2)_CFLAGS) -c $$< -o $$@ -MF $$(patsubst %.o,%.d,$$@)
 
 $(2)_junk += $$($(2)_pch) $$($(2)_objs) $$($(2)_c_objs) $$($(2)_deps) \
   $$($(2)_gen_hdrs)
@@ -239,13 +239,12 @@ $(2)_reverse_deps   := $$(call reverse_list,$$($(2)_subproject_deps))
 $(2)_lib_libs       := $$($(2)_reverse_deps)
 $(2)_lib_libnames   := $$(patsubst %, lib%.a, $$($(2)_lib_libs))
 $(2)_lib_libarg     := $$(patsubst %, -l%, $$($(2)_lib_libs))
-$(2)_lib_libnames_shared	:= $$(if $$($(2)_install_shared_lib),lib$(1).so,)
 
 lib$(1).a : $$($(2)_objs) $$($(2)_c_objs)
 	rm -f $$@
 	$(AR) rcs $$@ $$^
-lib$(1).so : $$($(2)_objs) $$($(2)_c_objs) $$($(2)_lib_libnames_shared) $$($(2)_lib_libnames)
-	$(LINK) -shared -o $$@ $(if $(filter Darwin,$(shell uname -s)),-install_name $(install_libs_dir)/$$@) $$^ $$($(2)_lib_libnames) $(LIBS)
+lib$(1).so : $$($(2)_objs) $$($(2)_c_objs) $$($(2)_lib_libnames)
+	$(LINK) -shared -o $$@ $(if $(filter Darwin,$(shell uname -s)),-install_name $(install_libs_dir)/$$@) $$^ $(LIBS)
 
 $(2)_junk += lib$(1).a
 $(2)_junk += $$(if $$($(2)_install_shared_lib),lib$(1).so,)
@@ -261,7 +260,7 @@ $(2)_test_libnames  := $$(patsubst %, lib%.a, $$($(2)_test_libs))
 $(2)_test_libarg    := $$(patsubst %, -l%, $$($(2)_test_libs))
 
 $$($(2)_test_objs) : %.o : %.cc
-	$(COMPILE) -c $$<
+	$(COMPILE) -c $$< -o $$@ -MF $$(patsubst %.o,%.d,$$@)
 
 $$($(2)_test_exes) : %-utst : %.t.o $$($(2)_test_libnames)
 	$(LINK) $$($(2)_LDFLAGS) -o $$@ $$< $$($(2)_test_libnames) $(LIBS)
@@ -289,7 +288,7 @@ $(2)_prog_libnames  := $$(patsubst %, lib%.a, $$($(2)_prog_libs))
 $(2)_prog_libarg    := $$(patsubst %, -l%, $$($(2)_prog_libs))
 
 $$($(2)_prog_objs) : %.o : %.cc
-	$(COMPILE) -c $$<
+	$(COMPILE) -c $$< -o $$@ -MF $$(patsubst %.o,%.d,$$@)
 
 $$($(2)_prog_exes) : % : %.o $$($(2)_prog_libnames)
 	$(LINK) $$($(2)_LDFLAGS) -o $$@ $$< $$($(2)_prog_libnames) $(LIBS)
@@ -304,7 +303,7 @@ $(2)_install_prog_deps := $$(patsubst %.o, %.d, $$($(2)_install_prog_objs))
 $(2)_install_prog_exes := $$(patsubst %.cc, %, $$($(2)_install_prog_srcs))
 
 $$($(2)_install_prog_objs) : %.o : %.cc $$($(2)_gen_hdrs)
-	$(COMPILE) -c $$<
+	$(COMPILE) -c $$< -o $$@ -MF $$(patsubst %.o,%.d,$$@)
 
 $$($(2)_install_prog_exes) : % : %.o $$($(2)_prog_libnames)
 	$(LINK) $$($(2)_LDFLAGS) -o $$@ $$< $$($(2)_prog_libnames) $(LIBS)

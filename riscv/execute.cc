@@ -40,13 +40,12 @@ static void commit_log_print_value(FILE *log_file, int width, const void *data)
       fprintf(log_file, "0x%016" PRIx64, *(const uint64_t *)data);
       break;
     default:
-      // max lengh of vector
-      if (((width - 1) & width) == 0) {
-        const uint64_t *arr = (const uint64_t *)data;
+      if (width % 8 == 0) {
+        const uint8_t *arr = (const uint8_t *)data;
 
         fprintf(log_file, "0x");
-        for (int idx = width / 64 - 1; idx >= 0; --idx) {
-          fprintf(log_file, "%016" PRIx64, arr[idx]);
+        for (int idx = width / 8 - 1; idx >= 0; --idx) {
+          fprintf(log_file, "%02" PRIx8, arr[idx]);
         }
       } else {
         abort();
@@ -178,11 +177,6 @@ static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t f
         commit_log_print_insn(p, pc, fetch.insn);
       }
      }
-  } catch (wait_for_interrupt_t &t) {
-      if (p->get_log_commits_enabled()) {
-        commit_log_print_insn(p, pc, fetch.insn);
-      }
-      throw;
   } catch(mem_trap_t& t) {
       //handle segfault in midlle of vector load/store
       if (p->get_log_commits_enabled()) {
@@ -202,15 +196,17 @@ static inline reg_t execute_insn_logged(processor_t* p, reg_t pc, insn_fetch_t f
   return npc;
 }
 
-bool processor_t::slow_path()
+bool processor_t::slow_path() const
 {
   return debug || state.single_step != state.STEP_NONE || state.debug_mode ||
-         log_commits_enabled || histogram_enabled || in_wfi || check_triggers_icount;
+         log_commits_enabled || histogram_enabled || is_waiting_for_interrupt() || check_triggers_icount;
 }
 
 // fetch/decode/execute loop
 void processor_t::step(size_t n)
 {
+  mmu_t* _mmu = mmu;
+
   if (!state.debug_mode) {
     if (halt_request == HR_REGULAR) {
       enter_debug_mode(DCSR_CAUSE_DEBUGINT, 0);
@@ -225,11 +221,11 @@ void processor_t::step(size_t n)
   while (n > 0) {
     size_t instret = 0;
     reg_t pc = state.pc;
-    mmu_t* _mmu = mmu;
     state.prv_changed = false;
     state.v_changed = false;
+    reg_t mcountinhibit = state.mcountinhibit->read();
 
-    #define advance_pc() \
+    #define advance_pc() { \
       if (unlikely(invalid_pc(pc))) { \
         switch (pc) { \
           case PC_SERIALIZE_BEFORE: state.serialized = true; break; \
@@ -237,11 +233,11 @@ void processor_t::step(size_t n)
           default: abort(); \
         } \
         pc = state.pc; \
-        break; \
+        goto serialize; \
       } else { \
         state.pc = pc; \
         instret++; \
-      }
+      }}
 
     try
     {
@@ -281,19 +277,15 @@ void processor_t::step(size_t n)
             }
           }
 
-          // debug mode wfis must nop
-          // difftest wfis must nop too
+          // WFI is a no-op while Spike is used as a difftest reference.
           #ifndef DIFFTEST
-          if (unlikely(in_wfi && !state.debug_mode)) {
-            throw wait_for_interrupt_t();
-          }
+          if (unlikely(is_waiting_for_interrupt()))
+            return;
           #endif
 
-          in_wfi = false;
           insn_fetch_t fetch = mmu->load_insn(pc);
           if (debug && !state.serialized)
             disasm(fetch.insn);
-          sim->difftest_log("pc = 0x%lx inst 0x%x", pc, fetch.insn);
           pc = execute_insn_logged(this, pc, fetch);
           advance_pc();
 
@@ -312,20 +304,22 @@ void processor_t::step(size_t n)
       else while (instret < n)
       {
         // Main simulation loop, fast path.
-        for (auto ic_entry = _mmu->access_icache(pc); ; ) {
+        for (auto ic_entry = _mmu->access_icache(pc); instret < n; instret++) {
           auto fetch = ic_entry->data;
           sim->difftest_log("pc = 0x%lx inst 0x%x", pc, fetch.insn);
-          pc = execute_insn_fast(this, pc, fetch);
           ic_entry = ic_entry->next;
-          if (unlikely(ic_entry->tag != pc))
-            break;
-          if (unlikely(instret + 1 == n))
-            break;
-          instret++;
-          state.pc = pc;
+          auto new_pc = execute_insn_fast(this, pc, fetch);
+          if (unlikely(ic_entry->tag != new_pc)) {
+            ic_entry = &_mmu->icache[_mmu->icache_index(new_pc)];
+            _mmu->icache[_mmu->icache_index(pc)].next = ic_entry;
+            if (ic_entry->tag != new_pc) {
+              pc = new_pc;
+              advance_pc();
+              break;
+            }
+          }
+          state.pc = pc = ic_entry->tag;
         }
-
-        advance_pc();
       }
     }
     catch(trap_t& t)
@@ -354,34 +348,22 @@ void processor_t::step(size_t n)
     }
     catch (triggers::matched_t& t)
     {
-      if (mmu->matched_trigger) {
-        delete mmu->matched_trigger;
-        mmu->matched_trigger = NULL;
-      }
       take_trigger_action(t.action, t.address, pc, t.gva);
+      // End this step at the trigger boundary.  In particular, a timing-before
+      // trigger retires no instruction, so continuing would immediately execute
+      // from the debug ROM or trap vector to consume the remaining step count.
+      n = instret;
     }
     catch(trap_debug_mode&)
     {
       enter_debug_mode(DCSR_CAUSE_SWBP, 0);
     }
-    catch (wait_for_interrupt_t &t)
-    {
-      // Return to the outer simulation loop, which gives other devices/harts a
-      // chance to generate interrupts.
-      //
-      // In the debug ROM this prevents us from wasting time looping, but also
-      // allows us to switch to other threads only once per idle loop in case
-      // there is activity.
-      n = ++instret;
-      in_wfi = true;
-    }
 
-    if (!(state.mcountinhibit->read() & MCOUNTINHIBIT_IR))
-      state.minstret->bump(instret);
+serialize:
+    state.minstret->bump((mcountinhibit & MCOUNTINHIBIT_IR) ? 0 : instret);
 
     // Model a hart whose CPI is 1.
-    if (!(state.mcountinhibit->read() & MCOUNTINHIBIT_CY))
-      state.mcycle->bump(instret);
+    state.mcycle->bump((mcountinhibit & MCOUNTINHIBIT_CY) ? 0 : instret);
 
     n -= instret;
   }

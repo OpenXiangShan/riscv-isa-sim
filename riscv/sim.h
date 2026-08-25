@@ -6,6 +6,7 @@
 #include "cfg.h"
 #include "debug_module.h"
 #include "devices.h"
+#include "common.h"
 #include "log_file.h"
 #include "processor.h"
 #include "simif.h"
@@ -13,6 +14,7 @@
 #include <fesvr/htif.h>
 #include <vector>
 #include <map>
+#include <unordered_map>
 #include <string>
 #include <memory>
 #include <sys/types.h>
@@ -31,11 +33,13 @@ public:
   sim_t(const cfg_t *cfg, bool halted,
         std::vector<std::pair<reg_t, abstract_mem_t*>> mems,
         const std::vector<device_factory_sargs_t>& plugin_device_factories,
+        const bool dtb_discovery,
         const std::vector<std::string>& args,
         const debug_module_config_t &dm_config, const char *log_path,
         bool dtb_enabled, const char *dtb_file,
         bool socket_enabled,
-        FILE *cmd_file); // needed for command line option --cmd
+        FILE *cmd_file, // needed for command line option --cmd
+        std::optional<unsigned long long> instruction_limit);
   ~sim_t();
 
   // run the simulation to completion
@@ -54,12 +58,14 @@ public:
   void set_remote_bitbang(remote_bitbang_t* remote_bitbang) {
     this->remote_bitbang = remote_bitbang;
   }
-  const char* get_dts() { return dts.c_str(); }
+  const char* get_dts();
   processor_t* get_core(size_t i) { return procs.at(i); }
   abstract_interrupt_controller_t* get_intctrl() const { assert(plic.get()); return plic.get(); }
   virtual const cfg_t &get_cfg() const override { return *cfg; }
+  virtual bool is_debug_module_access(reg_t paddr, size_t len) override;
 
   virtual const std::map<size_t, processor_t*>& get_harts() const override { return harts; }
+  const bus_t& get_bus() const {  return bus;}
 
   // Callback for processors to let the simulation know they were reset.
   virtual void proc_reset(unsigned id) override;
@@ -77,9 +83,11 @@ private:
   std::vector<std::pair<reg_t, abstract_mem_t*>> mems;
   std::vector<processor_t*> procs;
   std::map<size_t, processor_t*> harts;
+  std::unordered_map<reg_t, char*> addr_to_mem_cache;
   std::pair<reg_t, reg_t> initrd_range;
   std::string dts;
   std::string dtb;
+  bool dtb_discovery;
   bool dtb_enabled;
   std::vector<std::shared_ptr<abstract_device_t>> devices;
   std::shared_ptr<clint_t> clint;
@@ -88,6 +96,8 @@ private:
   log_file_t log_file;
 
   FILE *cmd_file; // pointer to debug command input file
+
+  std::optional<unsigned long long> instruction_limit;
 
   socketif_t *socketif;
   std::ostream sout_; // used for socket and terminal interface
@@ -105,7 +115,10 @@ public:
   remote_bitbang_t* remote_bitbang;
   std::optional<std::function<void()>> next_interactive_action;
 
-  // memory-mapped I/O routines
+  // If padd corresponds to memory (as opposed to an I/O device), return a
+  // host pointer corresponding to paddr.
+  // For these purposes, only memories that include the entire base page
+  // surrounding paddr are considered; smaller memories are treated as I/O.
 #if defined(DIFFTEST)
 public:
 #endif
@@ -115,6 +128,8 @@ public:
 #if defined(DIFFTEST)
 private:
 #endif
+
+  // memory-mapped I/O routines
   virtual bool mmio_load(reg_t paddr, size_t len, uint8_t* bytes) override;
   virtual bool mmio_store(reg_t paddr, size_t len, const uint8_t* bytes) override;
   void set_rom();

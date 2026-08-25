@@ -20,15 +20,15 @@ class dummycsr_t: public csr_t {
 
 // dummy extension with dummy CSRs. Nice.
 struct xdummycsr_t : public extension_t {
-  const char *name() { return "dummycsr"; }
+  const char *name() const override { return "dummycsr"; }
 
   xdummycsr_t() {}
 
-  std::vector<insn_desc_t> get_instructions() override {
+  std::vector<insn_desc_t> get_instructions(const processor_t &) override {
     return {};
   }
 
-  std::vector<disasm_insn_t *> get_disasms() override {
+  std::vector<disasm_insn_t *> get_disasms(const processor_t *) override {
     return {};
   }
 
@@ -37,7 +37,7 @@ struct xdummycsr_t : public extension_t {
   }
 };
 
-REGISTER_EXTENSION(dummycsr, []() { return new xdummycsr_t; })
+REGISTER_EXTENSION(dummycsr, []() { static xdummycsr_t ext; return &ext; })
 
 // Copied from spike main.
 // TODO: This should really be provided in libriscv
@@ -71,11 +71,13 @@ int main(int argc, char **argv) {
                                      .support_impebreak = true};
   std::vector<std::pair<reg_t, abstract_mem_t *>> mems =
       make_mems(cfg.mem_layout);
-  sim_t sim(&cfg, false, mems, plugin_devices, htif_args, dm_config,
+  bool dtb_discovery=false;
+  sim_t sim(&cfg, false, mems, plugin_devices, dtb_discovery, htif_args, dm_config,
             nullptr,  // log_path
             true,     // dtb_enabled
             nullptr,  // dtb_file
             false,    // socket_enabled
-            nullptr); // cmd_file
+            nullptr,  // cmd_file
+            std::nullopt); // instruction_limit
   sim.run();
 }

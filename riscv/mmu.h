@@ -3,6 +3,7 @@
 #ifndef _RISCV_MMU_H
 #define _RISCV_MMU_H
 
+#include "bloom_filter.h"
 #include "decode.h"
 #include "trap.h"
 #include "common.h"
@@ -12,13 +13,32 @@
 #include "../fesvr/byteorder.h"
 #include "triggers.h"
 #include "cfg.h"
+
+#include <algorithm>
+#include <cassert>
+#include <cstddef>
 #include <stdlib.h>
-#include <vector>
 
 // virtual memory configuration
 #define PGSHIFT 12
 const reg_t PGSIZE = 1 << PGSHIFT;
 const reg_t PGMASK = ~(PGSIZE-1);
+
+// observability hooks for load, store and fetch
+// intentionally empty not to cause runtime overhead
+// can be redefined if needed 
+#ifndef MMU_OBSERVE_FETCH
+#define MMU_OBSERVE_FETCH(addr, insn, length)
+#endif
+
+#ifndef MMU_OBSERVE_LOAD
+#define MMU_OBSERVE_LOAD(addr, data, length)
+#endif
+
+#ifndef MMU_OBSERVE_STORE
+#define MMU_OBSERVE_STORE(addr, data, length)
+#endif
+
 #ifdef CONFIG_MAX_PADDR_BITS
 #define MAX_PADDR_BITS CONFIG_MAX_PADDR_BITS
 #else
@@ -33,13 +53,23 @@ struct insn_fetch_t
 
 struct icache_entry_t {
   reg_t tag;
-  struct icache_entry_t* next;
+  icache_entry_t* next;
   insn_fetch_t data;
 };
 
 struct tlb_entry_t {
-  char* host_offset;
-  reg_t target_offset;
+  uintptr_t host_addr;
+  reg_t target_addr;
+};
+
+struct dtlb_entry_t {
+  tlb_entry_t data;
+  reg_t tag;
+};
+
+struct pte_cache_entry_t {
+  reg_t paddr;
+  reg_t pte;
 };
 
 struct xlate_flags_t {
@@ -62,46 +92,37 @@ struct mem_access_info_t {
   const bool effective_virt;
   const xlate_flags_t flags;
   const access_type type;
-
-  mem_access_info_t split_misaligned_access(reg_t offset) const {
-    return {vaddr + offset, transformed_vaddr + offset, effective_priv, effective_virt, flags, type};
-  }
 };
 
-void throw_access_exception(bool virt, reg_t addr, access_type type);
+[[noreturn]] void throw_access_exception(bool virt, reg_t addr, access_type type);
+[[noreturn]] void throw_page_fault_exception(bool virt, reg_t addr, access_type type);
 
 // this class implements a processor's port into the virtual memory system.
 // an MMU and instruction cache are maintained for simulator performance.
 class mmu_t
 {
 private:
-  std::map<reg_t, reg_t> alloc_cache;
-  std::vector<std::pair<reg_t, reg_t >> addr_tbl;
-
   reg_t get_pmlen(bool effective_virt, reg_t effective_priv, xlate_flags_t flags) const;
   mem_access_info_t generate_access_info(reg_t addr, access_type type, xlate_flags_t xlate_flags);
 
 public:
-  mmu_t(simif_t* sim, endianness_t endianness, processor_t* proc);
+  mmu_t(simif_t* sim, endianness_t endianness, processor_t* proc, reg_t cache_blocksz);
   ~mmu_t();
 
   template<typename T>
   T ALWAYS_INLINE load(reg_t addr, xlate_flags_t xlate_flags = {}) {
     target_endian<T> res;
-    reg_t vpn = addr >> PGSHIFT;
     bool aligned = (addr & (sizeof(T) - 1)) == 0;
-    bool tlb_hit = tlb_load_tag[vpn % TLB_ENTRIES] == vpn;
+    auto [tlb_hit, host_addr, paddr] = access_tlb(tlb_load, addr);
 
     if (likely(!xlate_flags.is_special_access() && aligned && tlb_hit)) {
-      res = *(target_endian<T>*)(tlb_data[vpn % TLB_ENTRIES].host_offset + addr);
-      auto paddr = tlb_data[vpn % TLB_ENTRIES].target_offset + addr;
+      res = *(target_endian<T>*)host_addr;
       sim->difftest_log_mem_load(paddr, &res, sizeof(T));
     } else {
       load_slow_path(addr, sizeof(T), (uint8_t*)&res, xlate_flags);
     }
 
-    if (unlikely(proc && proc->get_log_commits_enabled()))
-      proc->state.log_mem_read.push_back(std::make_tuple(addr, 0, sizeof(T)));
+    MMU_OBSERVE_LOAD(addr,from_target(res),sizeof(T));
 
     return from_target(res);
   }
@@ -126,27 +147,23 @@ public:
   T ss_load(reg_t addr) {
     if ((addr & (sizeof(T) - 1)) != 0)
       throw trap_store_access_fault((proc) ? proc->state.v : false, addr, 0, 0);
-    return load<T>(addr, {.forced_virt=false, .hlvx=false, .lr=false, .ss_access=true});
+    return load<T>(addr, {.ss_access=true});
   }
 
   template<typename T>
   void ALWAYS_INLINE store(reg_t addr, T val, xlate_flags_t xlate_flags = {}) {
-    reg_t vpn = addr >> PGSHIFT;
+    MMU_OBSERVE_STORE(addr, val, sizeof(T));
     bool aligned = (addr & (sizeof(T) - 1)) == 0;
-    bool tlb_hit = tlb_store_tag[vpn % TLB_ENTRIES] == vpn;
+    auto [tlb_hit, host_addr, paddr] = access_tlb(tlb_store, addr);
 
     if (!xlate_flags.is_special_access() && likely(aligned && tlb_hit)) {
-      *(target_endian<T>*)(tlb_data[vpn % TLB_ENTRIES].host_offset + addr) = to_target(val);
-      auto paddr = tlb_data[vpn % TLB_ENTRIES].target_offset + addr;
-      auto v = to_target(val);
-      sim->difftest_log_mem_store(paddr, &v, sizeof(T));
+      auto target_val = to_target(val);
+      *(target_endian<T>*)host_addr = target_val;
+      sim->difftest_log_mem_store(paddr, &target_val, sizeof(T));
     } else {
       target_endian<T> target_val = to_target(val);
       store_slow_path(addr, sizeof(T), (const uint8_t*)&target_val, xlate_flags, true, false);
     }
-
-    if (unlikely(proc && proc->get_log_commits_enabled()))
-      proc->state.log_mem_write.push_back(std::make_tuple(addr, val, sizeof(T)));
   }
 
   template<typename T>
@@ -159,7 +176,7 @@ public:
   void ss_store(reg_t addr, T val) {
     if ((addr & (sizeof(T) - 1)) != 0)
       throw trap_store_access_fault((proc) ? proc->state.v : false, addr, 0, 0);
-    store<T>(addr, val, {.forced_virt=false, .hlvx=false, .lr=false, .ss_access=true});
+    store<T>(addr, val, {.ss_access=true});
   }
 
   // AMO/Zicbom faults should be reported as store faults
@@ -167,7 +184,6 @@ public:
     try { \
       BODY \
     } catch (trap_load_address_misaligned& t) { \
-      /* Misaligned fault will not be triggered by Zicbom */ \
       throw trap_store_address_misaligned(t.has_gva(), t.get_tval(), t.get_tval2(), t.get_tinst()); \
     } catch (trap_load_page_fault& t) { \
       throw trap_store_page_fault(t.has_gva(), t.get_tval(), t.get_tval2(), t.get_tinst()); \
@@ -177,17 +193,26 @@ public:
       throw trap_store_guest_page_fault(t.get_tval(), t.get_tval2(), t.get_tinst()); \
     }
 
+  inline bool enforce_amo_alignment(reg_t addr, size_t size)
+  {
+    if (proc->extension_enabled(EXT_ZAMA16B))
+      return (addr / 16) != ((addr + size - 1) / 16);
+
+    return true;
+  }
+
   // template for functions that perform an atomic memory operation
   template<typename T, typename op>
   T amo(reg_t addr, op f) {
     convert_load_traps_to_store_traps({
-
-      xlate_flags_t xlate_flags = {};
-      auto access_info = generate_access_info(addr, LOAD, xlate_flags);
-      reg_t transformed_addr = access_info.transformed_vaddr;
-      check_triggers(triggers::OPERATION_LOAD, transformed_addr, access_info.effective_virt);
-
-      store_slow_path(addr, sizeof(T), nullptr, {}, false, true);
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+      // XiangShan gives an AMO load trigger priority over a misaligned trap.
+      // Check the load half before store_slow_path enforces AMO alignment.
+      auto access_info = generate_access_info(addr, LOAD, {});
+      check_triggers(triggers::OPERATION_LOAD, access_info.transformed_vaddr,
+                     access_info.effective_virt, sizeof(T));
+#endif
+      store_slow_path(addr, sizeof(T), nullptr, {}, false, enforce_amo_alignment(addr, sizeof(T)));
       auto lhs = load<T>(addr);
       sim->is_amo = true;
       store<T>(addr, f(lhs));
@@ -198,20 +223,18 @@ public:
   // for shadow stack amoswap
   template<typename T>
   T ssamoswap(reg_t addr, reg_t value) {
-      bool forced_virt = false;
-      bool hlvx = false;
-      bool lr = false;
-      bool ss_access = true;
-      store_slow_path(addr, sizeof(T), nullptr, {forced_virt, hlvx, lr, ss_access}, false, true);
-      auto data = load<T>(addr, {forced_virt, hlvx, lr, ss_access});
-      store<T>(addr, value, {forced_virt, hlvx, lr, ss_access});
+    convert_load_traps_to_store_traps({
+      store_slow_path(addr, sizeof(T), nullptr, {.ss_access=true}, false, true);
+      auto data = load<T>(addr, {.ss_access=true});
+      store<T>(addr, value, {.ss_access=true});
       return data;
+    })
   }
 
   template<typename T>
   T amo_compare_and_swap(reg_t addr, T comp, T swap) {
     convert_load_traps_to_store_traps({
-      store_slow_path(addr, sizeof(T), nullptr, {}, false, true);
+      store_slow_path(addr, sizeof(T), nullptr, {}, false, enforce_amo_alignment(addr, sizeof(T)));
       auto lhs = load<T>(addr);
       if (lhs == comp) {
         sim->is_amo = true;
@@ -221,33 +244,19 @@ public:
     })
   }
 
-  void store_float128(reg_t addr, float128_t val)
-  {
-    if (unlikely(addr & (sizeof(float128_t)-1)) && !is_misaligned_enabled()) {
-      throw trap_store_address_misaligned((proc) ? proc->state.v : false, addr, 0, 0);
-    }
-
-    store<uint64_t>(addr, val.v[0]);
-    store<uint64_t>(addr + 8, val.v[1]);
-  }
-
-  float128_t load_float128(reg_t addr)
-  {
-    if (unlikely(addr & (sizeof(float128_t)-1)) && !is_misaligned_enabled()) {
-      throw trap_load_address_misaligned((proc) ? proc->state.v : false, addr, 0, 0);
-    }
-
-    return (float128_t){load<uint64_t>(addr), load<uint64_t>(addr + 8)};
-  }
-
   void cbo_zero(reg_t addr) {
     auto access_info = generate_access_info(addr, STORE, {});
     reg_t transformed_addr = access_info.transformed_vaddr;
 
-    auto base = transformed_addr & ~(blocksz - 1);
-    for (size_t offset = 0; offset < blocksz; offset += 1) {
-      check_triggers(triggers::OPERATION_STORE, base + offset, false, transformed_addr, std::nullopt);
-      store<uint8_t>(base + offset, 0);
+    check_triggers(triggers::OPERATION_STORE, transformed_addr, false, blocksz);
+
+    reg_t paddr = translate(access_info, 1) - (transformed_addr & (blocksz - 1));
+    if (auto host_addr = sim->addr_to_mem(paddr)) {
+      if (tracer.interested_in_range(paddr, paddr + blocksz, STORE))
+        tracer.trace(paddr, blocksz, STORE);
+      memset(host_addr, 0, blocksz);
+    } else {
+      throw trap_store_access_fault((proc) ? proc->state.v : false, transformed_addr, 0, 0);
     }
   }
 
@@ -255,13 +264,11 @@ public:
     auto access_info = generate_access_info(addr, LOAD, {.clean_inval = true});
     reg_t transformed_addr = access_info.transformed_vaddr;
 
-    auto base = transformed_addr & ~(blocksz - 1);
-    for (size_t offset = 0; offset < blocksz; offset += 1)
-      check_triggers(triggers::OPERATION_STORE, base + offset, false, transformed_addr, std::nullopt);
+    check_triggers(triggers::OPERATION_STORE, transformed_addr, false, blocksz);
     convert_load_traps_to_store_traps({
-      const reg_t paddr = translate(access_info, 1);
+      const reg_t paddr = translate(access_info, 1) - (transformed_addr & (blocksz - 1));
       if (sim->reservable(paddr)) {
-        if (tracer.interested_in_range(paddr, paddr + PGSIZE, LOAD))
+        if (tracer.interested_in_range(paddr, paddr + blocksz, LOAD))
           tracer.clean_invalidate(paddr, blocksz, clean, inval);
       } else {
         throw trap_store_access_fault((proc) ? proc->state.v : false, transformed_addr, 0, 0);
@@ -281,18 +288,23 @@ public:
       store_slow_path(vaddr, size, nullptr, {}, false, true);
     }
 
-    reg_t paddr = translate(generate_access_info(vaddr, STORE, {}), 1);
+    auto [tlb_hit, _, paddr] = access_tlb(tlb_store, vaddr);
+    if (!tlb_hit)
+      paddr = translate(generate_access_info(vaddr, STORE, {}), 1);
+
     if (sim->reservable(paddr)) {
 #ifdef DIFFTEST
-      // We assume practical hardware designs would have 64-byte (1 << 6 bytes) reservation sets.
+      // Match practical DUT reservation sets, which are 64 bytes wide.
       auto index = [](reg_t addr) { return addr >> 6; };
       return index(load_reservation_address) == index(paddr);
 #else
       return load_reservation_address == paddr;
 #endif // DIFFTEST
     }
-    else
-      throw trap_store_access_fault((proc) ? proc->state.v : false, vaddr, 0, 0);
+
+    // SC to non-reservable region: report the PMM-masked effective vaddr.
+    auto access_info = generate_access_info(vaddr, STORE, {});
+    throw trap_store_access_fault(access_info.effective_virt, access_info.transformed_vaddr, 0, 0);
   }
 
   template<typename T>
@@ -301,7 +313,8 @@ public:
     xlate_flags_t xlate_flags = {};
     auto access_info = generate_access_info(addr, STORE, xlate_flags);
     reg_t transformed_addr = access_info.transformed_vaddr;
-    check_triggers(triggers::OPERATION_STORE, transformed_addr, access_info.effective_virt);
+    check_triggers(triggers::OPERATION_STORE, transformed_addr,
+      access_info.effective_virt, sizeof(T));
 
     bool have_reservation = check_load_reservation(addr, sizeof(T));
     if (have_reservation && sim->sc_failed) {
@@ -320,7 +333,7 @@ public:
     return have_reservation;
   }
 
-  static const reg_t ICACHE_ENTRIES = 1024;
+  static const reg_t ICACHE_ENTRIES = 4096;
 
   inline size_t icache_index(reg_t addr)
   {
@@ -329,59 +342,59 @@ public:
 
   template<typename T>
   T ALWAYS_INLINE fetch_jump_table(reg_t addr) {
-    auto tlb_entry = translate_insn_addr(addr);
-    return from_target(*(target_endian<T>*)(tlb_entry.host_offset + addr));
+    T res = 0;
+    for (size_t i = 0; i < sizeof(T) / sizeof(insn_parcel_t); i++)
+      res |= (T)fetch_slow_path(addr + i * sizeof(insn_parcel_t)) << (i * sizeof(insn_parcel_t) * 8);
+
+    // table accesses use data endianness, not instruction (little) endianness
+    return target_big_endian ? to_be(res) : res;
   }
 
   inline icache_entry_t* refill_icache(reg_t addr, icache_entry_t* entry)
   {
-    if (matched_trigger)
-      throw *matched_trigger;
-
-    auto tlb_entry = translate_insn_addr(addr);
-    insn_bits_t insn = from_le(*(uint16_t*)(tlb_entry.host_offset + addr));
-    int length = insn_length(insn);
-
-    if (likely(length == 4)) {
-      insn |= (insn_bits_t)from_le(*(const uint16_t*)translate_insn_addr_to_host(addr + 2)) << 16;
-    } else if (length == 2) {
-      // entire instruction already fetched
-    } else if (length == 6) {
-      insn |= (insn_bits_t)from_le(*(const uint16_t*)translate_insn_addr_to_host(addr + 2)) << 16;
-      insn |= (insn_bits_t)from_le(*(const uint16_t*)translate_insn_addr_to_host(addr + 4)) << 32;
-    } else {
-      static_assert(sizeof(insn_bits_t) == 8, "insn_bits_t must be uint64_t");
-      insn |= (insn_bits_t)from_le(*(const uint16_t*)translate_insn_addr_to_host(addr + 2)) << 16;
-      insn |= (insn_bits_t)from_le(*(const uint16_t*)translate_insn_addr_to_host(addr + 4)) << 32;
-      insn |= (insn_bits_t)from_le(*(const uint16_t*)translate_insn_addr_to_host(addr + 6)) << 48;
-    }
+    auto [insn, length] = fetch_insn(addr);
 
     insn_fetch_t fetch = {proc->decode_insn(insn), insn};
     entry->tag = addr;
     entry->next = &icache[icache_index(addr + length)];
     entry->data = fetch;
 
-    reg_t paddr = tlb_entry.target_offset + addr;;
+    auto [check_tracer, _, paddr] = access_tlb(tlb_insn, addr, TLB_FLAGS, TLB_CHECK_TRACER);
     sim->difftest_log_mem_instr(paddr, &insn, sizeof(insn));
-    if (tracer.interested_in_range(paddr, paddr + 1, FETCH)) {
-      entry->tag = -1;
-      tracer.trace(paddr, length, FETCH);
+    if (unlikely(check_tracer)) {
+      if (tracer.interested_in_range(paddr, paddr + 1, FETCH)) {
+        entry->tag = -1;
+        tracer.trace(paddr, paddr + length, FETCH);
+      }
     }
+    MMU_OBSERVE_FETCH(addr, insn, length);
     return entry;
   }
 
   inline icache_entry_t* access_icache(reg_t addr)
   {
     icache_entry_t* entry = &icache[icache_index(addr)];
-    if (likely(entry->tag == addr))
+    if (likely(entry->tag == addr)){
+      MMU_OBSERVE_FETCH(addr, entry->data.insn, insn_length(entry->data.insn.bits()));
       return entry;
+    }
     return refill_icache(addr, entry);
   }
 
   inline insn_fetch_t load_insn(reg_t addr)
   {
-    icache_entry_t entry;
-    return refill_icache(addr, &entry)->data;
+    return refill_icache(addr, &icache[icache_index(addr)])->data;
+  }
+
+  std::tuple<bool, uintptr_t, reg_t> ALWAYS_INLINE access_tlb(const dtlb_entry_t* tlb, reg_t vaddr, reg_t allowed_flags = 0, reg_t required_flags = 0)
+  {
+    auto vpn = vaddr / PGSIZE, pgoff = vaddr % PGSIZE;
+    auto& entry = tlb[vpn % TLB_ENTRIES];
+    auto hit = likely((entry.tag & (~allowed_flags | required_flags)) == (vpn | required_flags));
+    bool mmio = allowed_flags & TLB_MMIO & entry.tag;
+    auto host_addr = mmio ? 0 : entry.data.host_addr + pgoff;
+    auto paddr = entry.data.target_addr + pgoff;
+    return std::make_tuple(hit, host_addr, paddr);
   }
 
   void flush_tlb();
@@ -394,7 +407,7 @@ public:
 
   int is_misaligned_enabled()
   {
-    return proc && proc->get_cfg().misaligned;
+    return proc && proc->extension_enabled(EXT_ZICCLSM);
   }
 
   bool is_target_big_endian()
@@ -412,17 +425,11 @@ public:
     return target_big_endian? target_endian<T>::to_be(n) : target_endian<T>::to_le(n);
   }
 
-  void set_cache_blocksz(reg_t size)
-  {
-    blocksz = size;
-  }
-
 private:
   simif_t* sim;
   processor_t* proc;
   memtracer_list_t tracer;
   reg_t load_reservation_address;
-  uint16_t fetch_temp;
   reg_t blocksz;
 
   // implement an instruction cache for simulator performance
@@ -433,10 +440,23 @@ private:
   // If a TLB tag has TLB_CHECK_TRIGGERS set, then the MMU must check for a
   // trigger match before completing an access.
   static const reg_t TLB_CHECK_TRIGGERS = reg_t(1) << 63;
-  tlb_entry_t tlb_data[TLB_ENTRIES];
-  reg_t tlb_insn_tag[TLB_ENTRIES];
-  reg_t tlb_load_tag[TLB_ENTRIES];
-  reg_t tlb_store_tag[TLB_ENTRIES];
+  static const reg_t TLB_CHECK_TRACER = reg_t(1) << 62;
+  static const reg_t TLB_MMIO = reg_t(1) << 61;
+  static const reg_t TLB_FLAGS = TLB_CHECK_TRIGGERS | TLB_CHECK_TRACER | TLB_MMIO;
+  dtlb_entry_t tlb_load[TLB_ENTRIES];
+  dtlb_entry_t tlb_store[TLB_ENTRIES];
+  dtlb_entry_t tlb_insn[TLB_ENTRIES];
+
+  static const reg_t PTE_CACHE_ENTRIES = 251;
+  pte_cache_entry_t pte_cache[PTE_CACHE_ENTRIES];
+
+  typedef bloom_filter_t<reg_t, simple_hash1, simple_hash2, TLB_ENTRIES * 16, 3> reverse_tags_t;
+  reverse_tags_t tlb_store_reverse_tags;
+  reverse_tags_t tlb_insn_reverse_tags;
+
+  bool flush_tlb_ppn(reg_t ppn, dtlb_entry_t* tlb, reverse_tags_t& filter);
+  void flush_itlb_ppn(reg_t ppn);
+  void flush_stlb_ppn(reg_t ppn);
 
   // finish translation on a TLB miss and update the TLB
   tlb_entry_t refill_tlb(reg_t vaddr, reg_t paddr, char* host_addr, access_type type);
@@ -449,20 +469,35 @@ private:
   reg_t walk(mem_access_info_t access_info);
 
   // handle uncommon cases: TLB misses, page faults, MMIO
-  tlb_entry_t fetch_slow_path(reg_t addr);
-  void load_slow_path(reg_t original_addr, reg_t len, uint8_t* bytes, xlate_flags_t xlate_flags);
+  typedef uint16_t insn_parcel_t;
+
+  insn_parcel_t fetch_slow_path(reg_t addr);
+  insn_parcel_t perform_intrapage_fetch(reg_t vaddr, uintptr_t host_addr, reg_t paddr);
+
+  void load_slow_path(reg_t original_addr, std::size_t len,
+    std::uint8_t* bytes, xlate_flags_t xlate_flags);
   void load_slow_path_intrapage(reg_t len, uint8_t* bytes, mem_access_info_t access_info);
-  void store_slow_path(reg_t original_addr, reg_t len, const uint8_t* bytes, xlate_flags_t xlate_flags, bool actually_store, bool require_alignment);
+  void perform_intrapage_load(reg_t vaddr, uintptr_t host_addr, reg_t paddr, reg_t len, uint8_t* bytes, xlate_flags_t xlate_flags);
+
+  void store_slow_path(reg_t original_addr, std::size_t len, const std::uint8_t* bytes,
+    xlate_flags_t xlate_flags, bool actually_store, bool require_alignment);
   void store_slow_path_intrapage(reg_t len, const uint8_t* bytes, mem_access_info_t access_info, bool actually_store);
+  void perform_intrapage_store(reg_t vaddr, uintptr_t host_addr, reg_t paddr, reg_t len, const uint8_t* bytes, xlate_flags_t xlate_flags);
+
   bool mmio_fetch(reg_t paddr, size_t len, uint8_t* bytes);
   bool mmio_load(reg_t paddr, size_t len, uint8_t* bytes);
   bool mmio_store(reg_t paddr, size_t len, const uint8_t* bytes);
   bool mmio(reg_t paddr, size_t len, uint8_t* bytes, access_type type);
-  bool mmio_ok(reg_t paddr, access_type type);
-  void check_triggers(triggers::operation_t operation, reg_t address, bool virt, std::optional<reg_t> data = std::nullopt) {
-    check_triggers(operation, address, virt, address, data);
-  }
-  void check_triggers(triggers::operation_t operation, reg_t address, bool virt, reg_t tval, std::optional<reg_t> data);
+
+  void check_triggers(triggers::operation_t operation,
+    reg_t addr, bool virt, std::size_t data_size, const std::uint8_t* bytes);
+  void check_triggers(triggers::operation_t operation,
+    reg_t addr, bool virt, std::size_t access_len);
+  void check_triggers(triggers::operation_t operation, reg_t address,
+    bool virt, std::size_t size, std::optional<reg_t> data);
+
+  bool svukte_qualified(mem_access_info_t access_info);
+  bool svukte_fault(reg_t addr, mem_access_info_t access_info);
   reg_t translate(mem_access_info_t access_info, reg_t len);
 
   reg_t pte_load(reg_t pte_paddr, reg_t addr, bool virt, access_type trap_type, size_t ptesize) {
@@ -481,6 +516,9 @@ private:
 
   template<typename T> inline reg_t pte_load(reg_t pte_paddr, reg_t addr, bool virt, access_type trap_type)
   {
+    if (auto [hit, pte] = pte_cache_access(pte_paddr); hit)
+      return pte;
+
     const size_t ptesize = sizeof(T);
 
     if (!pmp_ok(pte_paddr, ptesize, LOAD, PRV_S, false))
@@ -494,7 +532,10 @@ private:
     } else if (!mmio_load(pte_paddr, ptesize, (uint8_t*)&target_pte)) {
       throw_access_exception(virt, addr, trap_type);
     }
-    return from_target(target_pte);
+
+    auto res = from_target(target_pte);
+    pte_cache_insert(pte_paddr, res);
+    return res;
   }
 
   template<typename T> inline void pte_store(reg_t pte_paddr, reg_t new_pte, reg_t addr, bool virt, access_type trap_type)
@@ -511,30 +552,66 @@ private:
     } else if (!mmio_store(pte_paddr, ptesize, (uint8_t*)&target_pte)) {
       throw_access_exception(virt, addr, trap_type);
     }
+
+    pte_cache_insert(pte_paddr, new_pte);
   }
 
-  // ITLB lookup
-  inline tlb_entry_t translate_insn_addr(reg_t addr) {
-    reg_t vpn = addr >> PGSHIFT;
-    if (likely(tlb_insn_tag[vpn % TLB_ENTRIES] == vpn))
-      return tlb_data[vpn % TLB_ENTRIES];
-    return fetch_slow_path(addr);
+  std::tuple<bool, reg_t> pte_cache_access(reg_t key)
+  {
+    auto e = pte_cache[key % PTE_CACHE_ENTRIES];
+    return std::make_tuple(e.paddr == key, e.pte);
   }
 
-  inline const uint16_t* translate_insn_addr_to_host(reg_t addr) {
-    return (uint16_t*)(translate_insn_addr(addr).host_offset + addr);
+  void pte_cache_insert(reg_t key, reg_t value)
+  {
+    if (value & PTE_V)
+      pte_cache[key % PTE_CACHE_ENTRIES] = {key, value};
+  }
+
+  std::tuple<insn_bits_t, size_t> ALWAYS_INLINE fetch_insn(reg_t addr)
+  {
+    bool intrapage = addr % PGSIZE + sizeof(insn_bits_t) <= PGSIZE;
+    if (auto [tlb_hit, host_addr, paddr] = access_tlb(tlb_insn, addr); tlb_hit && intrapage) {
+      insn_bits_t insn = from_le(*(insn_parcel_t*)host_addr);
+      size_t length = insn_length(insn);
+
+      for (size_t pos = sizeof(insn_parcel_t); pos < length; pos += sizeof(insn_parcel_t)) {
+        insn |= insn_bits_t(from_le(*(insn_parcel_t*)(host_addr + pos))) << (8 * pos);
+        length = insn_length(insn);
+      }
+
+      return std::make_tuple(insn, length);
+    }
+
+    insn_bits_t insn = fetch_slow_path(addr);
+    size_t length = insn_length(insn);
+
+    for (size_t pos = sizeof(insn_parcel_t); pos < length; pos += sizeof(insn_parcel_t)) {
+      insn |= insn_bits_t(fetch_slow_path(addr + pos)) << (8 * pos);
+      length = insn_length(insn);
+    }
+
+    if (check_triggers_fetch) {
+      auto access_info = generate_access_info(addr, FETCH, {});
+      check_triggers(triggers::OPERATION_EXECUTE, addr,
+        access_info.effective_virt, length, insn);
+    }
+
+    return std::make_tuple(insn, length);
   }
 
   inline bool in_mprv() const
   {
     return proc != nullptr
            && !(proc->state.mnstatus && !get_field(proc->state.mnstatus->read(), MNSTATUS_NMIE))
-           && !proc->state.debug_mode
+           && (!proc->state.debug_mode || get_field(proc->state.dcsr->read(), DCSR_MPRVEN))
            && get_field(proc->state.mstatus->read(), MSTATUS_MPRV);
   }
 
   reg_t pmp_homogeneous(reg_t addr, reg_t len);
+  std::optional<base_pmpaddr_csr_t*> pmp_lookup(reg_t addr, reg_t len, size_t start, size_t pmp_num);
   bool pmp_ok(reg_t addr, reg_t len, access_type type, reg_t mode, bool hlvx);
+  bool spmp_ok(reg_t addr, reg_t len, access_type type, reg_t mode);
 
 #ifdef RISCV_ENABLE_DUAL_ENDIAN
   bool target_big_endian;
@@ -544,8 +621,7 @@ private:
   bool check_triggers_fetch;
   bool check_triggers_load;
   bool check_triggers_store;
-  // The exception describing a matched trigger, or NULL.
-  triggers::matched_t *matched_trigger;
+  std::optional<triggers::matched_t> matched_trigger;
 
   friend class processor_t;
 };

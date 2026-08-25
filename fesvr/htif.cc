@@ -20,6 +20,11 @@
 #include <unistd.h>
 #include <signal.h>
 #include <getopt.h>
+#include <libgen.h>
+#include <limits.h>
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
 
 /* Attempt to determine the execution prefix automatically.  autoconf
  * sets PREFIX, and pconfigure sets __PCONFIGURE__PREFIX. */
@@ -35,6 +40,10 @@
 # define TARGET_DIR "/" TARGET_ARCH "/bin/"
 #endif
 
+#ifndef PROC_SELF_EXE
+# define PROC_SELF_EXE "/proc/self/exe"
+#endif
+
 static volatile bool signal_exit = false;
 static void handle_signal(int sig)
 {
@@ -46,7 +55,7 @@ static void handle_signal(int sig)
 
 htif_t::htif_t()
   : mem(this), entry(DRAM_BASE), sig_addr(0), sig_len(0),
-    tohost_addr(0), fromhost_addr(0), exitcode(0), stopped(false),
+    tohost_addr(0), fromhost_addr(0), stopped(false),
     syscall_proxy(this)
 {
 #if !defined(SPIKE_FUZZ) && !defined(DIFFTEST)
@@ -72,12 +81,12 @@ htif_t::htif_t(const std::vector<std::string>& args) : htif_t()
   line_size = 16;
 #ifndef DIFFTEST
   int argc = args.size() + 1;
-  char * argv[argc];
+  std::vector<char*>argv(argc);
   argv[0] = (char *) "htif";
   for (unsigned int i = 0; i < args.size(); i++) {
     argv[i+1] = (char *) args[i].c_str();
   }
-  parse_arguments(argc, argv);
+  parse_arguments(argc, &argv[0]);
 #else
   // No need for parse_arguments because the arguments are empty.
   // Calling it will cause errors because of its usage of getopt.
@@ -93,16 +102,20 @@ htif_t::~htif_t()
 
 void htif_t::start()
 {
-  if (!targs.empty() && targs[0] != "none") {
-    try {
-      load_program();
-    } catch (const incompat_xlen & err) {
-      fprintf(stderr, "Error: cannot execute %d-bit program on RV%d hart\n", err.actual_xlen, err.expected_xlen);
-      exit(1);
+  if (!targs.empty()) {
+    if (targs[0] != "none") {
+      try {
+        load_program();
+      } catch (const incompat_xlen & err) {
+        fprintf(stderr, "Error: cannot execute %d-bit program on RV%d hart\n", err.actual_xlen, err.expected_xlen);
+        exit(1);
+      }
+      reset();
+    } else {
+      auto empty_symbols = std::map<std::string, uint64_t>();
+      load_symbols(empty_symbols);
     }
   }
-
-  reset();
 }
 
 static void bad_address(const std::string& situation, reg_t addr)
@@ -112,6 +125,20 @@ static void bad_address(const std::string& situation, reg_t addr)
   exit(-1);
 }
 
+static std::string get_prefix_from_arg0() {
+  char exe_path[PATH_MAX];
+#ifdef __APPLE__
+  uint32_t bufsize = PATH_MAX - 1;
+  ssize_t len = _NSGetExecutablePath(exe_path, &bufsize) == 0 ? bufsize : -1;
+#else
+  ssize_t len = readlink(PROC_SELF_EXE, exe_path, PATH_MAX - 1);
+#endif
+  if (len == -1)
+    return PREFIX;
+  exe_path[len] = '\0';
+  return std::string(dirname(exe_path)) + "/..";
+}
+
 std::map<std::string, uint64_t> htif_t::load_payload(const std::string& payload, reg_t* entry, reg_t load_offset)
 {
   std::string path;
@@ -119,14 +146,15 @@ std::map<std::string, uint64_t> htif_t::load_payload(const std::string& payload,
     path = payload;
   else if (payload.find('/') == std::string::npos)
   {
-    std::string test_path = PREFIX TARGET_DIR + payload;
+    std::string prefix = get_prefix_from_arg0();
+    std::string test_path = prefix + TARGET_DIR + payload;
     if (access(test_path.c_str(), F_OK) == 0)
       path = test_path;
     else
       throw std::runtime_error(
         "could not open " + payload + "; searched paths:\n" +
         "\t. (current directory)\n" +
-        "\t" + PREFIX TARGET_DIR + " (based on configured --prefix and --with-target)"
+        "\t" + prefix + TARGET_DIR + " (based on configured --prefix and --with-target)"
       );
   }
 
@@ -159,35 +187,13 @@ std::map<std::string, uint64_t> htif_t::load_payload(const std::string& payload,
   }
 }
 
-void htif_t::load_program()
+void htif_t::load_symbols(std::map<std::string, uint64_t>& symbols)
 {
-  std::map<std::string, uint64_t> symbols = load_payload(targs[0], &entry, load_offset);
-
-  if (symbols.count("tohost") && symbols.count("fromhost")) {
-    tohost_addr = symbols["tohost"];
-    fromhost_addr = symbols["fromhost"];
-  } else {
-    fprintf(stderr, "warning: tohost and fromhost symbols not in ELF; can't communicate with target\n");
-  }
-
-  // detect torture tests so we can print the memory signature at the end
-  if (symbols.count("begin_signature") && symbols.count("end_signature")) {
-    sig_addr = symbols["begin_signature"];
-    sig_len = symbols["end_signature"] - sig_addr;
-  }
-
-  for (auto payload : payloads) {
-    reg_t dummy_entry;
-    load_payload(payload, &dummy_entry, 0);
-  }
-
   class nop_memif_t : public memif_t {
    public:
-    nop_memif_t(htif_t* htif) : memif_t(htif), htif(htif) {}
+    nop_memif_t(htif_t* htif) : memif_t(htif) {}
     void read(addr_t UNUSED addr, size_t UNUSED len, void UNUSED *bytes) override {}
     void write(addr_t UNUSED taddr, size_t UNUSED len, const void UNUSED *src) override {}
-   private:
-    htif_t* htif;
   } nop_memif(this);
 
   reg_t nop_entry;
@@ -197,10 +203,35 @@ void htif_t::load_program()
     symbols.merge(other_symbols);
   }
 
+  // detect torture tests so we can print the memory signature at the end
+  if (symbols.count("begin_signature") && symbols.count("end_signature")) {
+    sig_addr = symbols["begin_signature"];
+    sig_len = symbols["end_signature"] - sig_addr;
+  }
+
+  if (symbols.count("tohost") && symbols.count("fromhost")) {
+    tohost_addr = symbols["tohost"];
+    fromhost_addr = symbols["fromhost"];
+  } else {
+    fprintf(stderr, "warning: tohost and fromhost symbols not in ELF; can't communicate with target\n");
+  }
+
   for (auto i : symbols) {
     auto it = addr2symbol.find(i.second);
     if ( it == addr2symbol.end())
       addr2symbol[i.second] = i.first;
+  }
+}
+
+void htif_t::load_program()
+{
+  std::map<std::string, uint64_t> symbols = load_payload(targs[0], &entry, load_offset);
+
+  load_symbols(symbols);
+
+  for (auto payload : payloads) {
+    reg_t dummy_entry;
+    load_payload(payload, &dummy_entry, 0);
   }
 
   return;
@@ -214,6 +245,14 @@ const char* htif_t::get_symbol(uint64_t addr)
       return nullptr;
 
   return it->second.c_str();
+}
+
+bool htif_t::should_exit() const {
+  return signal_exit || exitcode.has_value();
+}
+
+void htif_t::htif_exit(int exit_code) {
+  exitcode = exit_code;
 }
 
 void htif_t::stop()
@@ -245,11 +284,10 @@ void htif_t::stop()
 
 void htif_t::clear_chunk(addr_t taddr, size_t len)
 {
-  char zeros[chunk_max_size()];
-  memset(zeros, 0, chunk_max_size());
+  std::vector<uint8_t> zeros(chunk_max_size(), 0);
 
-  for (size_t pos = 0; pos < len; pos += chunk_max_size())
-    write_chunk(taddr + pos, std::min(len - pos, chunk_max_size()), zeros);
+  for (size_t pos = 0; pos < len; pos += zeros.size())
+    write_chunk(taddr + pos, std::min(len - pos, zeros.size()), &zeros[0]);
 }
 
 int htif_t::run()
@@ -262,11 +300,11 @@ int htif_t::run()
     std::bind(enq_func, &fromhost_queue, std::placeholders::_1);
 
   if (tohost_addr == 0) {
-    while (!signal_exit)
+    while (!should_exit())
       idle();
   }
 
-  while (!signal_exit && exitcode == 0)
+  while (!should_exit())
   {
     uint64_t tohost;
 
@@ -314,7 +352,7 @@ bool htif_t::done()
 
 int htif_t::exit_code()
 {
-  return exitcode >> 1;
+  return exitcode.value_or(0) >> 1;
 }
 
 void htif_t::parse_arguments(int argc, char ** argv)

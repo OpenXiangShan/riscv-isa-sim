@@ -22,6 +22,7 @@ typedef enum {
   EXT_ZCA,
   EXT_ZCB,
   EXT_ZCD,
+  EXT_ZCE,
   EXT_ZCF,
   EXT_ZCLSD,
   EXT_ZCMP,
@@ -34,29 +35,44 @@ typedef enum {
   EXT_ZKR,
   EXT_ZMMUL,
   EXT_ZVFH,
+  EXT_ZVFBFA,
   EXT_ZVFHMIN,
+  EXT_ZVFOFP4MIN,
+  EXT_ZVFOFP8MIN,
   EXT_SDTRIG,
   EXT_SMEPMP,
-  EXT_SMSTATEEN,
+  EXT_SMPMPMT,
   EXT_SMRNMI,
+  EXT_SMSTATEEN,
+  EXT_SSPMP,
+  EXT_SMPMPDELEG,
+  EXT_SSPMPEN,
   EXT_SSCOFPMF,
   EXT_SVADU,
+  EXT_SVADE,
   EXT_SVNAPOT,
   EXT_SVPBMT,
   EXT_SVINVAL,
+  EXT_SVUKTE,
+  EXT_SVRSW60T59B,
   EXT_ZDINX,
   EXT_ZFA,
   EXT_ZFBFMIN,
   EXT_ZFINX,
   EXT_ZHINX,
   EXT_ZHINXMIN,
+  EXT_ZIBI,
+  EXT_ZICCID,
   EXT_ZICBOM,
   EXT_ZICBOZ,
+  EXT_ZICCLSM,
   EXT_ZICNTR,
   EXT_ZICOND,
   EXT_ZIHPM,
   EXT_ZILSD,
+  EXT_ZVABD,
   EXT_ZVBB,
+  EXT_ZVKB,
   EXT_ZVBC,
   EXT_ZVFBFMIN,
   EXT_ZVFBFWMA,
@@ -66,15 +82,45 @@ typedef enum {
   EXT_ZVKNHB,
   EXT_ZVKSED,
   EXT_ZVKSH,
+  EXT_ZVDOT4A,
+  EXT_ZVQWBDOTA8I,
+  EXT_ZVQWBDOTA16I,
+  EXT_ZVFQWBDOTA8F,
+  EXT_ZVFWBDOTA16BF,
+  EXT_ZVFBDOTA32F,
+  EXT_ZVQWDOTA8I,
+  EXT_ZVQWDOTA16I,
+  EXT_ZVFQWDOTA8F,
+  EXT_ZVFWDOTA16BF,
+  EXT_ZVTBASE,
+  EXT_ZVT8T,
+  EXT_ZVT16T,
+  EXT_ZVT32T,
+  EXT_ZVT64T,
+  EXT_ZVT128T,
+  EXT_ZVT256T,
+  EXT_ZVT8E,
+  EXT_ZVT16E,
+  EXT_ZVT64E,
+  EXT_ZVTI8I32MM,
+  EXT_ZVTOFP8FMM,
+  EXT_ZVTFP16FMM,
+  EXT_ZVTBF16FMM,
+  EXT_ZVTFMM,
+  EXT_ZVTDMM,
+  EXT_ZVZIP,
   EXT_SSTC,
   EXT_ZAAMO,
   EXT_ZALRSC,
   EXT_ZACAS,
   EXT_ZABHA,
   EXT_ZAWRS,
+  EXT_ZAMA16B,
   EXT_INTERNAL_ZFH_MOVE,
   EXT_SMCSRIND,
   EXT_SSCSRIND,
+  EXT_SMCDELEG,
+  EXT_SSCCFG,
   EXT_SMCNTRPMF,
   EXT_ZIMOP,
   EXT_ZCMOP,
@@ -87,16 +133,15 @@ typedef enum {
   EXT_SMMPM,
   EXT_SMNPM,
   EXT_SSNPM,
+  EXT_SMAIA,
+  EXT_SSAIA,
+  EXT_ZA64RS,
+  EXT_ZA128RS,
+  EXT_ZILX,
   NUM_ISA_EXTENSIONS
 } isa_extension_t;
 
 typedef enum {
-  IMPL_MMU_SV32,
-  IMPL_MMU_SV39,
-  IMPL_MMU_SV48,
-  IMPL_MMU_SV57,
-  IMPL_MMU_SBARE,
-  IMPL_MMU,
   IMPL_MMU_VMID,
   IMPL_MMU_ASID,
 } impl_extension_t;
@@ -110,6 +155,7 @@ public:
   std::string get_isa_string() const { return isa_string; }
   reg_t get_vlen() const { return vlen; }
   reg_t get_elen() const { return elen; }
+  reg_t get_te() const;
   bool get_zvf() const { return zvf; }
   bool get_zvd() const { return zvd; }
   bool extension_enabled(unsigned char ext) const {
@@ -134,6 +180,10 @@ protected:
   std::bitset<NUM_ISA_EXTENSIONS> extension_table;
   std::string isa_string;
   std::set<std::string> extensions;
+
+private:
+  void add_extension(const std::string&, const char*);
+  void apply_zve_properties(const std::string&, const char*);
 };
 
 #endif

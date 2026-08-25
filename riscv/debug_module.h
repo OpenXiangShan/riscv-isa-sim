@@ -2,7 +2,7 @@
 #ifndef _RISCV_DEBUG_MODULE_H
 #define _RISCV_DEBUG_MODULE_H
 
-#include <set>
+#include <array>
 #include <vector>
 
 #include "abstract_device.h"
@@ -15,6 +15,7 @@ struct debug_module_config_t {
   // Size of program_buffer in 32-bit words, as exposed to the rest of the
   // world.
   unsigned progbufsize = 2;
+  unsigned datacount = 2;
   unsigned max_sba_data_width = 0;
   bool require_authentication = false;
   unsigned abstract_rti = 0;
@@ -23,6 +24,7 @@ struct debug_module_config_t {
   bool support_abstract_fpr_access = true;
   bool support_haltgroups = true;
   bool support_impebreak = true;
+  bool support_abstractauto = true;
 };
 
 struct dmcontrol_t {
@@ -99,6 +101,13 @@ struct hart_debug_state_t {
   uint8_t haltgroup;
 };
 
+// structure to describe mmio region
+struct region_descriptor {
+  reg_t addr;           // 1st addr in a range
+  size_t len;           // range size
+  const uint8_t *bytes; // data
+};
+
 class debug_module_t : public abstract_device_t
 {
   public:
@@ -114,8 +123,9 @@ class debug_module_t : public abstract_device_t
     debug_module_t(simif_t *sim, const debug_module_config_t &config);
     ~debug_module_t();
 
-    bool load(reg_t addr, size_t len, uint8_t* bytes);
-    bool store(reg_t addr, size_t len, const uint8_t* bytes);
+    bool load(reg_t addr, size_t len, uint8_t* bytes) override;
+    bool store(reg_t addr, size_t len, const uint8_t* bytes) override;
+    reg_t size() override;
 
     // Debug Module Interface that the debugger (in our case through JTAG DTM)
     // uses to access the DM.
@@ -130,7 +140,6 @@ class debug_module_t : public abstract_device_t
     void proc_reset(unsigned id);
 
   private:
-    static const unsigned datasize = 2;
     debug_module_config_t config;
     // Actual size of the program buffer, which is 1 word bigger than we let on
     // to implement the implicit ebreak at the end.
@@ -138,7 +147,7 @@ class debug_module_t : public abstract_device_t
     static const unsigned debug_data_start = 0x380;
     unsigned debug_progbuf_start;
 
-    static const unsigned debug_abstract_size = 12;
+    static const unsigned debug_abstract_size = 24;
     unsigned debug_abstract_start;
     // R/W this through custom registers, to allow debuggers to test that
     // functionality.
@@ -149,7 +158,8 @@ class debug_module_t : public abstract_device_t
     uint8_t debug_rom_whereto[4];
     uint8_t debug_abstract[debug_abstract_size * 4];
     uint8_t *program_buffer;
-    uint8_t dmdata[datasize * 4];
+    static constexpr unsigned dmdata_reg_size = 4;
+    std::vector<uint8_t> dmdata;
 
     std::vector<hart_debug_state_t> hart_state;
     uint8_t debug_rom_flags[1024];
@@ -173,6 +183,8 @@ class debug_module_t : public abstract_device_t
 
     unsigned sb_access_bits();
 
+    uint8_t *get_dmdata_checked(size_t required_size);
+
     dmcontrol_t dmcontrol;
     dmstatus_t dmstatus;
     abstractcs_t abstractcs;
@@ -190,7 +202,20 @@ class debug_module_t : public abstract_device_t
 
     bool hart_selected(unsigned hartid) const;
     void reset();
+
     bool perform_abstract_command();
+    bool perform_abstract_register_access();
+    bool perform_abstract_memory_access();
+
+    unsigned arg(unsigned xlen, unsigned i);
+
+    void handle_post_increment(size_t xlen, unsigned aamsize, unsigned &offset);
+    void handle_memory_read(size_t xlen, unsigned aamsize, unsigned &offset);
+    void handle_memory_write(size_t xlen, unsigned aamsize, unsigned &offset);
+
+    void generate_initial_sequence(bool aamvirtual, unsigned &offset);
+    void generate_termination_sequence(unsigned &offset);
+    void start_command_execution();
 
     bool abstract_command_completed;
     unsigned rti_remaining;
@@ -205,6 +230,8 @@ class debug_module_t : public abstract_device_t
     bool hart_available(unsigned hart_id) const;
 
     unsigned sb_read_wait, sb_write_wait;
+
+    std::array<region_descriptor, 6> debug_memory_regions;
 };
 
 #endif

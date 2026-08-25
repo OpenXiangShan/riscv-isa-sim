@@ -13,6 +13,14 @@
 // Predicate Macros
 //
 
+// Ensures that the ZVKB extension (vector crypto bitmanip subset) is present,
+// and the vector unit is enabled and in a valid state.
+#define require_zvkb \
+  do { \
+    require_vector(true); \
+    require_extension(EXT_ZVKB); \
+  } while (0)
+
 // Ensures that the ZVBB extension (vector crypto bitmanip) is present,
 // and the vector unit is enabled and in a valid state.
 #define require_zvbb \
@@ -85,6 +93,32 @@
 // Ensures that an element group can fit in a register group. That is,
 //    (LMUL * VLEN) <= EGW
 #define require_egw_fits(EGW)  require((EGW) <= (P.VU.VLEN * P.VU.vflmul))
+
+// Ensures that a register index is aligned to EMUL
+// evaluated as EGW / VLEN.
+// The check is only enabled if this value is greater
+// than one (no index alignment check required for fractional EMUL)
+#define require_vreg_align_eglmul(EGW, VREG_NUM) \
+  do { \
+    float vfeglmul = EGW / P.VU.VLEN; \
+    if (vfeglmul > 1) { \
+      require_align(VREG_NUM, vfeglmul); \
+    }\
+  } while (0)
+
+#define require_vs2_align_eglmul(EGW) require_vreg_align_eglmul(EGW, insn.rs2())
+
+// ensure that rs2 and rd do not overlap, assuming rd encodes an LMUL wide
+// vector register group and rs2 encodes an vs2_EMUL=ceil(EGW / VLEN) vector register
+// group.
+// Assumption: LMUL >= vs2_EMUL which is enforced independently through require_egw_fits.
+#define require_noover_eglmul(vd, vs2) \
+  do { \
+    int vd_emul = P.VU.vflmul < 1.f ? 1 : (int) P.VU.vflmul; \
+    int aligned_vd = vd / vd_emul; \
+    int aligned_vs2 = vs2 / vd_emul; \
+    require(aligned_vd != aligned_vs2); \
+  } while (0)
 
 // Checks that the vector unit state (vtype and vl) can be interpreted
 // as element groups with EEW=32, EGS=4 (four 32-bits elements per group),
@@ -288,7 +322,7 @@
       VV_VD_VS1_VS2_EGU32x4_PARAMS(vd_num, vs1_num, vs2_num, idx_eg); \
       EG_BODY \
     } \
-    P.VU.vstart->write(0); \
+    VECTOR_END; \
   } while (0)
 
 // Processes all 32b*8 element groups available in the vector register
@@ -343,7 +377,7 @@
       VV_VD_VS1_VS2_EGU32x8_PARAMS(vd_num, vs1_num, vs2_num, idx_eg); \
       EG_BODY \
     } \
-    P.VU.vstart->write(0); \
+    VECTOR_END; \
   } while (0)
 
 // Processes all 32b*4 element groups available in the vector register
@@ -411,7 +445,7 @@
         EG_BODY \
       } \
     } \
-    P.VU.vstart->write(0); \
+    VECTOR_END; \
   } while (0)
 
 // Processes all 32b*4 element groups available in the vector register
@@ -479,7 +513,7 @@
         EG_BODY \
       } \
     } \
-    P.VU.vstart->write(0); \
+    VECTOR_END; \
   } while (0)
 
 // Processes all 32b*4 element groups available in the vector registers
@@ -526,7 +560,7 @@
       VV_VD_VS2_EGU32x4_PARAMS(vd_num, vs2_num, idx_eg); \
       EG_BODY \
     } \
-    P.VU.vstart->write(0); \
+    VECTOR_END; \
   } while (0)
 
 // Processes all 32b*4 element groups available in the vector registers
@@ -582,7 +616,7 @@
         EG_BODY \
       } \
     } \
-    P.VU.vstart->write(0); \
+    VECTOR_END; \
   } while (0)
 
 // Processes all 32b*8 element groups available in the vector registers
@@ -638,7 +672,7 @@
         EG_BODY \
       } \
     } \
-    P.VU.vstart->write(0); \
+    VECTOR_END; \
   } while (0)
 
 // Processes all 64b*4 element groups available in the vector registers
@@ -692,7 +726,7 @@
       VV_VD_VS1_VS2_EGU64x4_PARAMS(vd_num, vs1_num, vs2_num, idx_eg); \
       EG_BODY \
     } \
-    P.VU.vstart->write(0); \
+    VECTOR_END; \
   } while (0)
 
 
