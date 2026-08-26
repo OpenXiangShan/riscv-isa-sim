@@ -43,6 +43,9 @@
 #else
     #define RVH_ISA_STRING ""
 #endif
+// Keep the difftest reset state aligned with NEMU's riscv64-xs-ref_defconfig.
+#define CONFIG_MDT_INIT  1
+#define CONFIG_NMIE_INIT 0
 #ifdef CONFIG_DIFF_RVV
     #define RVV_ISA_STRING "V"
 #else
@@ -78,6 +81,7 @@
     ZIHPM_ISA_STRING \
     SDTRIG_ISA_STRING \
     "_zacas" \
+    "_zabha" \
     "_zba_zbb_zbc_zbs_zbkb_zbkc_zbkx" \
     "_zimop_zcmop_zcb" \
     "_zknd_zkne_zknh_zksed_zksh" \
@@ -100,8 +104,9 @@
 #define CONFIG_FLASH_BASE      0x10000000UL
 #define CONFIG_FLASH_SIZE      0x10000000UL
 #define CONFIG_BLOCK_SIZE      64
-#define CONFIG_PMP_NUM         16
-#define CONFIG_PMP_MAX_NUM     16
+// NEMU implements 64 PMP CSRs, with the lowest 32 entries active.
+#define CONFIG_PMP_NUM         32
+#define CONFIG_PMP_MAX_NUM     64
 #define CONFIG_PMP_GRAN        12
 #define CONFIG_TRIGGER_NUM     4
 #define CONFIG_MAX_PADDR_BITS  48
