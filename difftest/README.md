@@ -25,6 +25,19 @@ make CPU=XIANGSHAN -jN
 
 Replace `XIANGSHAN` with `ROCKET` or `NUTSHELL` for co-simulation with Rocket or NutShell.
 
+To compile a standalone Spike executable with the XiangShan configuration, run:
+
+```
+make xiangshan-spike -jN
+```
+
+The executable is written to `build-xiangshan-spike/spike` and can load an ELF passed as a
+positional argument:
+
+```
+build-xiangshan-spike/spike /path/to/program.elf
+```
+
 ## Coverage Instrumentation with LLVM
 
 Add `SANCOV=1` to the `make` command to instrument the source code with LLVM coverage.
