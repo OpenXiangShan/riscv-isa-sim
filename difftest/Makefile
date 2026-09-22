@@ -5,10 +5,19 @@ GUEST_ISA = riscv64
 BUILD_DIR = $(abspath ./build)
 TARGET    = $(BUILD_DIR)/$(GUEST_ISA)-spike-so
 
+XIANGSHAN_BUILD_DIR ?= $(abspath ./build-xiangshan-spike)
+XIANGSHAN_SPIKE_TARGET = $(XIANGSHAN_BUILD_DIR)/spike
+XIANGSHAN_SPIKE_MAKEFILE = $(XIANGSHAN_BUILD_DIR)/Makefile
+XIANGSHAN_CONFIG_STAMP = $(XIANGSHAN_BUILD_DIR)/.config-signature
+
 # Dependencies for building Spike
 SPIKE_PATH     = $(abspath ..)
 SPIKE_TARGET   = $(BUILD_DIR)/spike
 SPIKE_MAKEFILE = $(BUILD_DIR)/Makefile
+
+XIANGSHAN_CONFIG_INPUTS = $(SPIKE_PATH)/configure $(SPIKE_PATH)/configure.ac \
+    $(SPIKE_PATH)/aclocal.m4 $(SPIKE_PATH)/config.h.in $(SPIKE_PATH)/Makefile.in \
+    $(wildcard $(SPIKE_PATH)/*/*.mk.in) $(abspath ./difftest-def.h)
 
 SPIKE_CFLAGS    = -O3 -DDIFFTEST -include $(abspath .)/difftest-def.h
 SPIKE_CXXFLAGS  = -O3 -DDIFFTEST -include $(abspath .)/difftest-def.h -Wno-c99-designator
@@ -34,6 +43,19 @@ CONFIGURE_FLAGS = -q CC=$(CC) CXX=$(CXX)         \
     --with-boost=no	--with-boost-asio=no --with-boost-regex=no \
     CFLAGS="$(SPIKE_CFLAGS)" CXXFLAGS="$(SPIKE_CXXFLAGS)"      \
     LDFLAGS="$(SPIKE_LDFLAGS)"
+
+XIANGSHAN_SPIKE_CFLAGS ?= -O3
+XIANGSHAN_SPIKE_CXXFLAGS ?= -O3 -Wno-c99-designator
+XIANGSHAN_SPIKE_LDFLAGS ?=
+override XIANGSHAN_SPIKE_CFLAGS += -DCPU_XIANGSHAN -include $(abspath .)/difftest-def.h
+override XIANGSHAN_SPIKE_CXXFLAGS += -DCPU_XIANGSHAN -include $(abspath .)/difftest-def.h
+
+ifeq ($(DEBUG),)
+XIANGSHAN_SPIKE_CFLAGS += -g0
+XIANGSHAN_SPIKE_CXXFLAGS += -g0
+endif
+
+XIANGSHAN_CONFIGURE_FLAGS ?= -q --with-boost=no --with-boost-asio=no --with-boost-regex=no
 
 SPIKE_INCS = fesvr riscv disasm customext fdt softfloat spike_main spike_dasm
 INC_PATH   = -I$(SPIKE_PATH) -I$(BUILD_DIR) $(addprefix -I$(SPIKE_PATH)/, $(SPIKE_INCS))
@@ -76,9 +98,42 @@ $(SPIKE_TARGET): $(SPIKE_MAKEFILE) $(SPIKE_SRCS)
 $(TARGET): $(SPIKE_TARGET) $(DIFFTEST_SOURCES) $(DIFFTEST_HEADERS) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) $(INC_PATH) $(DIFFTEST_SOURCES) $(INC_LIBS) -o $@
 
+xiangshan-config:
+	@set -eu; \
+	tmp=$$(mktemp); \
+	trap 'rm -f "$$tmp"' EXIT; \
+	{ \
+	  printf '%s\n' 'CC=$(CC)' 'CXX=$(CXX)' \
+	    'CONFIGURE_FLAGS=$(XIANGSHAN_CONFIGURE_FLAGS)' \
+	    'CFLAGS=$(XIANGSHAN_SPIKE_CFLAGS)' \
+	    'CXXFLAGS=$(XIANGSHAN_SPIKE_CXXFLAGS)' \
+	    'LDFLAGS=$(XIANGSHAN_SPIKE_LDFLAGS)'; \
+	  sha256sum $(XIANGSHAN_CONFIG_INPUTS); \
+	} > "$$tmp"; \
+	if ! test -r "$(XIANGSHAN_CONFIG_STAMP)" || \
+	   ! test -r "$(XIANGSHAN_SPIKE_MAKEFILE)" || \
+	   ! cmp -s "$$tmp" "$(XIANGSHAN_CONFIG_STAMP)"; then \
+	  rm -rf "$(XIANGSHAN_BUILD_DIR)"; \
+	  mkdir -p "$(XIANGSHAN_BUILD_DIR)"; \
+	  mv "$$tmp" "$(XIANGSHAN_CONFIG_STAMP)"; \
+	  cd "$(XIANGSHAN_BUILD_DIR)" && $(abspath $(SPIKE_PATH))/configure \
+	    $(XIANGSHAN_CONFIGURE_FLAGS) CC=$(CC) CXX=$(CXX) \
+	    CFLAGS="$(XIANGSHAN_SPIKE_CFLAGS)" \
+	    CXXFLAGS="$(XIANGSHAN_SPIKE_CXXFLAGS)" \
+	    LDFLAGS="$(XIANGSHAN_SPIKE_LDFLAGS)"; \
+	fi
+
+$(XIANGSHAN_SPIKE_TARGET): xiangshan-config $(SPIKE_SRCS)
+	$(MAKE) -s -C $(XIANGSHAN_BUILD_DIR) spike
+
+xiangshan-spike: $(XIANGSHAN_SPIKE_TARGET)
+
 clean:
 	rm -rf $(BUILD_DIR)
 
+clean-xiangshan-spike:
+	rm -rf $(XIANGSHAN_BUILD_DIR)
+
 .DEFAULT_GOAL = $(TARGET)
 
-.PHONY: clean
+.PHONY: xiangshan-config xiangshan-spike clean clean-xiangshan-spike

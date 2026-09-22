@@ -1,4 +1,5 @@
 build/
+/difftest/build-xiangshan-spike/
 *.gch
 autom4te.cache/
 .*.swp
