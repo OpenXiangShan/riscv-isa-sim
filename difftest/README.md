@@ -24,6 +24,12 @@ make CPU=XIANGSHAN -jN
 ```
 
 Replace `XIANGSHAN` with `ROCKET` or `NUTSHELL` for co-simulation with Rocket or NutShell.
+The resulting library is `build/riscv64-spike-so`.
+
+The library exports `difftest_set_ref_trace(bool)`. DiffTest's
+`--dump-ref-trace` option uses it to enable a Spike commit-log line containing
+the hart, privilege mode, PC, instruction, disassembly, register writes, and
+memory effects. Tracing is disabled by default.
 
 ## Coverage Instrumentation with LLVM
 
