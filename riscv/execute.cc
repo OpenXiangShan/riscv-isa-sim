@@ -18,6 +18,7 @@ static void commit_log_stash_privilege(processor_t* p)
 {
   state_t* state = p->get_state();
   state->last_inst_priv = state->prv;
+  state->last_inst_virt = state->v;
   state->last_inst_xlen = p->get_xlen();
   state->last_inst_flen = p->get_flen();
 }
@@ -68,17 +69,20 @@ static void commit_log_print_insn(processor_t *p, reg_t pc, insn_t insn)
   auto& load = p->get_state()->log_mem_read;
   auto& store = p->get_state()->log_mem_write;
   int priv = p->get_state()->last_inst_priv;
+  bool virt = p->get_state()->last_inst_virt;
   int xlen = p->get_state()->last_inst_xlen;
   int flen = p->get_state()->last_inst_flen;
 
-  // print core id on all lines so it is easy to grep
-  fprintf(log_file, "core%4" PRId32 ": ", p->get_id());
+  const char *mode = priv == PRV_M ? "M" :
+                     priv == PRV_S ? (virt ? "VS" : "S") :
+                     priv == PRV_U ? (virt ? "VU" : "U") : "?";
 
-  fprintf(log_file, "%1d ", priv);
+  fprintf(log_file, "%" PRIu32 ": %-2s ", p->get_id(), mode);
   commit_log_print_value(log_file, xlen, pc);
   fprintf(log_file, " (");
   commit_log_print_value(log_file, insn.length() * 8, insn.bits());
-  fprintf(log_file, ")");
+  const std::string disasm = p->get_disassembler()->disassemble(insn);
+  fprintf(log_file, ")  %-44s [", disasm.c_str());
   bool show_vec = false;
 
   for (auto item : reg) {
@@ -138,17 +142,20 @@ static void commit_log_print_insn(processor_t *p, reg_t pc, insn_t insn)
   }
 
   for (auto item : load) {
-    fprintf(log_file, " mem ");
-    commit_log_print_value(log_file, xlen, std::get<0>(item));
-  }
-
-  for (auto item : store) {
-    fprintf(log_file, " mem ");
+    fprintf(log_file, " mem r%d ", std::get<2>(item));
     commit_log_print_value(log_file, xlen, std::get<0>(item));
     fprintf(log_file, " ");
     commit_log_print_value(log_file, std::get<2>(item) << 3, std::get<1>(item));
   }
-  fprintf(log_file, "\n");
+
+  for (auto item : store) {
+    fprintf(log_file, " mem w%d ", std::get<2>(item));
+    commit_log_print_value(log_file, xlen, std::get<0>(item));
+    fprintf(log_file, " ");
+    commit_log_print_value(log_file, std::get<2>(item) << 3, std::get<1>(item));
+  }
+  fprintf(log_file, " ]\n");
+  fflush(log_file);
 }
 
 inline void processor_t::update_histogram(reg_t pc)

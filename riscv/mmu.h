@@ -101,7 +101,7 @@ public:
     }
 
     if (unlikely(proc && proc->get_log_commits_enabled()))
-      proc->state.log_mem_read.push_back(std::make_tuple(addr, 0, sizeof(T)));
+      proc->state.log_mem_read.push_back(std::make_tuple(addr, from_target(res), sizeof(T)));
 
     return from_target(res);
   }

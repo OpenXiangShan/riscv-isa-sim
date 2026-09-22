@@ -158,12 +158,10 @@ public:
   void raise_intr(uint64_t no);
   bool raise_critical_error();
   void dirty_fsvs(uint64_t dirties);
+  void set_trace(bool enabled) { p->set_log_commits(enabled); }
   void display();
   void update_mip(void *non_reg_interrupt_pending);
   void update_dynamic_config(void* config) {
-#ifdef RISCV_ENABLE_COMMITLOG
-  p->enable_log_commits();
-#endif
     auto c = (DifftestRefConfig *)config;
     sim->enable_difftest_logs = c->debug_difftest;
   }

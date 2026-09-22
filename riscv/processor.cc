@@ -159,6 +159,7 @@ void state_t::reset(processor_t* const proc, reg_t max_isa)
   log_mem_read.clear();
   log_mem_write.clear();
   last_inst_priv = 0;
+  last_inst_virt = false;
   last_inst_xlen = 0;
   last_inst_flen = 0;
 
@@ -185,6 +186,11 @@ void processor_t::set_histogram(bool value)
 void processor_t::enable_log_commits()
 {
   log_commits_enabled = true;
+}
+
+void processor_t::set_log_commits(bool value)
+{
+  log_commits_enabled = value;
 }
 
 void processor_t::reset()

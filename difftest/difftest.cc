@@ -608,9 +608,10 @@ void difftest_skip_one(bool isRVC, bool wen, uint32_t wdest, uint64_t wdata) {
 
 void difftest_init(int port) {
   ref = new DifftestRef;
-#ifdef RISCV_ENABLE_COMMITLOG
-  setvbuf(p->get_log_file(), NULL, _IONBF, 0);
-#endif
+}
+
+void difftest_set_ref_trace(bool enabled) {
+  ref->set_trace(enabled);
 }
 
 void difftest_raise_intr(uint64_t NO) {
