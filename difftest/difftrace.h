@@ -124,7 +124,7 @@ private:
             uint8_t  inside_mask = (st_mask << (paddr % 16ULL)) & 0xffULL;
             store_trace_t inside_trace{inside_addr, inside_data, inside_mask};
             store_trace.push(inside_trace);
-          } 
+          }
           else {
           uint64_t low_addr  = paddr - (paddr % 8ULL);
           uint64_t high_addr = paddr - (paddr % 16ULL) + 16ULL;
@@ -141,7 +141,7 @@ private:
           store_trace.push(low_trace);
           store_trace.push(high_trace);
           }
-        } 
+        }
         else {
           store_trace_t trace{paddr, data, len};
           store_trace.push(trace);
@@ -185,7 +185,7 @@ public:
   }
 
 #define __DIFFTEST_LOG_INTERFACE(name, type)                                      \
-  void inline difftest_log_mem_##name(uint64_t paddr, void *data, int len) {      \
+  void inline difftest_log_mem_##name(uint64_t paddr, const void *data, int len) { \
     difftest_log_mem(MemAccessType::type, paddr, *(const uint64_t *)data, len); \
   }
 

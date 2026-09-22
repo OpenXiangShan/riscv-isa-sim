@@ -34,7 +34,7 @@
 #define CONFIG_PMP_MAX_NUM     0
 #define CONFIG_TRIGGER_NUM     0
 #define CONFIG_MAX_PADDR_BITS  32
-#define CONFIG_MMU_CAPABILITY  IMPL_MMU_SV39
+#define CONFIG_MAX_VADDR_BITS  39
 #define CONFIG_MISALIGNED      false
 
 #elif defined(CPU_XIANGSHAN)
@@ -86,9 +86,11 @@
     "_svinval_sscofpmf" \
     "_svpbmt" \
     "_zicbom_zicboz" \
+    "_zicclsm" \
     "_sstc" \
     "_smcntrpmf" \
     "_smstateen" \
+    "_smaia_ssaia_smcsrind_sscsrind" \
     "_smrnmi_smdbltrp_ssdbltrp" \
     "_smmpm_smnpm_ssnpm" \
     "_svnapot" \
@@ -103,7 +105,7 @@
 #define CONFIG_PMP_GRAN        12
 #define CONFIG_TRIGGER_NUM     4
 #define CONFIG_MAX_PADDR_BITS  48
-#define CONFIG_MMU_CAPABILITY  IMPL_MMU_SV48
+#define CONFIG_MAX_VADDR_BITS  48
 #define CONFIG_MISALIGNED      true
 
 #elif defined(CPU_ROCKET_CHIP)
@@ -116,7 +118,7 @@
 #define CONFIG_PMP_MAX_NUM     64
 #define CONFIG_TRIGGER_NUM     0
 #define CONFIG_MAX_PADDR_BITS  32
-#define CONFIG_MMU_CAPABILITY  IMPL_MMU_SV39
+#define CONFIG_MAX_VADDR_BITS  39
 #define CONFIG_MISALIGNED      false
 #endif
 

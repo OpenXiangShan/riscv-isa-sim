@@ -28,7 +28,6 @@ DifftestRef::DifftestRef() :
   sim(create_sim(cfg)),
   p(sim->get_core(0UL)),
   state(p->get_state()) {
-  p->get_mmu()->set_cache_blocksz(CONFIG_BLOCK_SIZE);
 #if CONFIG_PMP_NUM > 0
   p->set_pmp_granularity(1 << CONFIG_PMP_GRAN);
 #endif
@@ -130,7 +129,7 @@ void DifftestRef::get_regs(diff_context_t *ctx) {
   }
   /***************************************************************************************************/
   ctx->vstart     = vstate.vstart->read();
-  ctx->vxsat      = vstate.vxsat->read();
+  ctx->vxsat      = state->vxsat->read();
   ctx->vxrm       = vstate.vxrm->read();
   ctx->vcsr       = state->csrmap[CSR_VCSR]->read();
   ctx->vl         = vstate.vl->read();
@@ -308,8 +307,8 @@ void DifftestRef::set_regs(diff_context_t *ctx, bool on_demand) {
   if (!on_demand || vstate.vstart->read() != ctx->vstart) {
     vstate.vstart->write_raw(ctx->vstart);
   }
-  if (!on_demand || vstate.vxsat->read() != ctx->vxsat) {
-    vstate.vxsat->write_raw(ctx->vxsat);
+  if (!on_demand || state->vxsat->read() != ctx->vxsat) {
+    state->vxsat->write_raw(ctx->vxsat);
   }
   if (!on_demand || vstate.vxrm->read() != ctx->vxrm) {
     vstate.vxrm->write_raw(ctx->vxrm);
@@ -466,14 +465,13 @@ const cfg_t *DifftestRef::create_cfg() {
   cfg->bootargs = nullptr;
   cfg->isa = CONFIG_DIFF_ISA_STRING;
   cfg->priv = DEFAULT_PRIV;
-  cfg->misaligned = CONFIG_MISALIGNED;
-    // const endianness_t default_endianness,
   cfg->endianness = endianness_little;
   cfg->pmpregions = CONFIG_PMP_NUM;
   cfg->mem_layout = memory_layout;
   cfg->hartids = std::vector<size_t>{overrided_mhartid};
   cfg->real_time_clint = false;
   cfg->trigger_count = CONFIG_TRIGGER_NUM;
+  cfg->cache_blocksz = CONFIG_BLOCK_SIZE;
   cfg->force_override = true;
   return cfg;
 }
@@ -531,6 +529,8 @@ sim_t *DifftestRef::create_sim(const cfg_t *cfg) {
     mems,
     // const std::vector<device_factory_sargs_t>& plugin_device_factories
     std::vector<device_factory_sargs_t>{},
+    // const bool dtb_discovery
+    false,
     // const std::vector<std::string>& args
     std::vector<std::string>{},
     // const debug_module_config_t &dm_config
@@ -542,7 +542,9 @@ sim_t *DifftestRef::create_sim(const cfg_t *cfg) {
     LOG_PATH,
 #endif // LOG_PATH
     //bool dtb_enabled, const char *dtb_file, bool socket_enabled, FILE *cmd_file
-    false, nullptr, false, nullptr
+    false, nullptr, false, nullptr,
+    // std::optional<unsigned long long> instruction_limit
+    std::nullopt
   );
 
   for (const auto& pair : plugin_devices) {

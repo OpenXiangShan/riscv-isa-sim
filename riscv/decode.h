@@ -85,6 +85,10 @@ public:
   insn_t(insn_bits_t bits) : b(bits) {}
   insn_bits_t bits() { return b; }
   int length() { return insn_length(b); }
+  [[maybe_unused]] int64_t opcode() { return x(0, 7); }
+  [[maybe_unused]] int64_t funct7() { return x(25, 7); }
+  [[maybe_unused]] int64_t funct3() { return x(12, 3); }
+  [[maybe_unused]] int64_t funct2() { return x(25, 2); }
   int64_t i_imm() { return xs(20, 12); }
   int64_t shamt() { return x(20, 6); }
   int64_t s_imm() { return x(7, 5) + (xs(25, 7) << 5); }
@@ -100,7 +104,11 @@ public:
   uint64_t iorw() { return x(20, 8); }
   uint64_t bs() { return x(30, 2); } // Crypto ISE - SM4/AES32 byte select.
   uint64_t rcon() { return x(20, 4); } // Crypto ISE - AES64 round const.
+  uint64_t rd_p() { return x(8, 4) * 2; }
+  uint64_t rs1_p() { return x(16, 4) * 2; }
+  uint64_t rs2_p() { return x(21, 4) * 2; }
 
+  [[maybe_unused]] int64_t rvc_opcode() { return x(0, 2); }
   int64_t rvc_imm() { return x(2, 5) + (xs(12, 1) << 5); }
   int64_t rvc_zimm() { return x(2, 5) + (x(12, 1) << 5); }
   int64_t rvc_addi4spn_imm() { return (x(6, 1) << 2) + (x(5, 1) << 3) + (x(11, 2) << 4) + (x(7, 4) << 6); }
@@ -149,11 +157,16 @@ public:
   uint64_t v_mew() { return x(28, 1); }
   uint64_t v_zimm6() { return x(15, 5) + (x(26, 1) << 5); }
 
-  uint64_t p_imm2() { return x(20, 2); }
-  uint64_t p_imm3() { return x(20, 3); }
-  uint64_t p_imm4() { return x(20, 4); }
-  uint64_t p_imm5() { return x(20, 5); }
-  uint64_t p_imm6() { return x(20, 6); }
+  uint64_t p_imm8() { return x(16, 8); }
+  uint64_t p_imm10csl() { return x(16, 9) + (x(15, 1) << 9); }
+  uint64_t p_imm10csr() { return (x(24, 1) << 6) + (x(15, 9) << 7); }
+  uint64_t p_imm10csrw() { return (x(24, 1) << 22) + (x(15, 9) << 23); }
+  uint64_t shamtd() { return x(20, 6); }
+  uint64_t shamtw() { return x(20, 5); }
+  uint64_t shamth() { return x(20, 4); }
+  uint64_t shamtb() { return x(20, 3); }
+
+  uint64_t b_imm5() { return (x(20, 5) == 0) ? -1ul : x(20, 5); }
 
   uint64_t zcmp_regmask() {
     unsigned mask = 0;
@@ -176,23 +189,29 @@ public:
     switch (rvc_rlist()) {
     case 15:
       stack_adj_base += 16;
+      [[fallthrough]];
     case 14:
       if (xlen == 64)
         stack_adj_base += 16;
+      [[fallthrough]];
     case 13:
     case 12:
       stack_adj_base += 16;
+      [[fallthrough]];
     case 11:
     case 10:
       if (xlen == 64)
         stack_adj_base += 16;
+      [[fallthrough]];
     case 9:
     case 8:
       stack_adj_base += 16;
+      [[fallthrough]];
     case 7:
     case 6:
       if (xlen == 64)
         stack_adj_base += 16;
+      [[fallthrough]];
     case 5:
     case 4:
       stack_adj_base += 16;
@@ -239,8 +258,5 @@ private:
 
 #define set_field(reg, mask, val) \
   (((reg) & ~(std::remove_cv<decltype(reg)>::type)(mask)) | (((std::remove_cv<decltype(reg)>::type)(val) * ((mask) & ~((mask) << 1))) & (std::remove_cv<decltype(reg)>::type)(mask)))
-
-#define DEBUG_START             0x0
-#define DEBUG_END               (0x1000 - 1)
 
 #endif

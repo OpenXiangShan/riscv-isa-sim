@@ -36,21 +36,21 @@ m4_define( proj_version, [?])
 # Setup
 #-------------------------------------------------------------------------
 
-AC_INIT(proj_name,proj_version,proj_maintainer,proj_abbreviation)
-AC_LANG_CPLUSPLUS
+AC_INIT([proj_name],[proj_version],[proj_maintainer],[proj_abbreviation])
+AC_LANG([C++])
 AC_CONFIG_SRCDIR([riscv/common.h])
 AC_CONFIG_AUX_DIR([scripts])
 AC_CANONICAL_BUILD
 AC_CANONICAL_HOST
 
-m4_include(ax_require_defined.m4)
-m4_include(ax_append_flag.m4)
-m4_include(ax_check_compile_flag.m4)
-m4_include(ax_check_link_flag.m4)
-m4_include(ax_append_link_flags.m4)
-m4_include(ax_boost_base.m4)
-m4_include(ax_boost_asio.m4)
-m4_include(ax_boost_regex.m4)
+m4_include(m4/ax_require_defined.m4)
+m4_include(m4/ax_append_flag.m4)
+m4_include(m4/ax_check_compile_flag.m4)
+m4_include(m4/ax_check_link_flag.m4)
+m4_include(m4/ax_append_link_flags.m4)
+m4_include(m4/ax_boost_base.m4)
+m4_include(m4/ax_boost_asio.m4)
+m4_include(m4/ax_boost_regex.m4)
 
 #-------------------------------------------------------------------------
 # Checks for programs
@@ -76,12 +76,6 @@ AC_C_BIGENDIAN
 MCPPBS_PROG_INSTALL
 
 #-------------------------------------------------------------------------
-# Checks for header files
-#-------------------------------------------------------------------------
-
-AC_HEADER_STDC
-
-#-------------------------------------------------------------------------
 # Checks for type
 #-------------------------------------------------------------------------
 
@@ -96,6 +90,17 @@ AC_CHECK_TYPE([__int128_t],
 AX_APPEND_LINK_FLAGS([-Wl,--export-dynamic])
 
 AX_CHECK_COMPILE_FLAG([-relocatable-pch], AC_SUBST([HAVE_CLANG_PCH],[yes]))
+
+#-------------------------------------------------------------------------
+# Checks for libraries
+#-------------------------------------------------------------------------
+
+AC_CHECK_LIB([pthread], [pthread_create], [],
+  [AC_MSG_ERROR([libpthread is required])])
+
+AX_BOOST_BASE([1.53])
+AX_BOOST_ASIO
+AX_BOOST_REGEX
 
 #-------------------------------------------------------------------------
 # MCPPBS subproject list

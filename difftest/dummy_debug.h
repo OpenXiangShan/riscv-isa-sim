@@ -14,6 +14,7 @@ class dummy_debug_t : public abstract_device_t
   public:
   bool load(reg_t addr, size_t len, uint8_t* bytes);
   bool store(reg_t addr, size_t len, const uint8_t* bytes);
+  reg_t size() override { return DUMMY_MEM_SIZE_BYTE; }
   ~dummy_debug_t();
   // we create a mem Region that is updated on every dut if/load/store
   uint8_t dummy_debug_mem[DUMMY_MEM_SIZE_BYTE];

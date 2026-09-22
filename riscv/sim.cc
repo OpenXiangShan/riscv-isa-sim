@@ -1,6 +1,7 @@
 // See LICENSE for license details.
 
 #include "config.h"
+#include "dtb_discovery.h"
 #include "sim.h"
 #include "mmu.h"
 #include "dts.h"
@@ -39,18 +40,22 @@ extern device_factory_t* ns16550_factory;
 sim_t::sim_t(const cfg_t *cfg, bool halted,
              std::vector<std::pair<reg_t, abstract_mem_t*>> mems,
              const std::vector<device_factory_sargs_t>& plugin_device_factories,
+             const bool dtb_discovery,
              const std::vector<std::string>& args,
              const debug_module_config_t &dm_config,
              const char *log_path,
              bool dtb_enabled, const char *dtb_file,
              bool socket_enabled,
-             FILE *cmd_file) // needed for command line option --cmd
+             FILE *cmd_file, // needed for command line option --cmd
+             std::optional<unsigned long long> instruction_limit)
   : htif_t(args),
     cfg(cfg),
     mems(mems),
+    dtb_discovery(dtb_discovery),
     dtb_enabled(dtb_enabled),
     log_file(log_path),
     cmd_file(cmd_file),
+    instruction_limit(instruction_limit),
     sout_(nullptr),
     current_step(0),
     current_proc(0),
@@ -67,9 +72,6 @@ sim_t::sim_t(const cfg_t *cfg, bool halted,
 #ifndef DIFFTEST
   sout_.rdbuf(std::cerr.rdbuf()); // debug output goes to stderr by default
 #endif // DIFFTEST
-
-  for (auto& x : mems)
-    bus.add_device(x.first, x.second);
 
   bus.add_device(DEBUG_START, &debug_module);
 
@@ -90,7 +92,7 @@ sim_t::sim_t(const cfg_t *cfg, bool halted,
 
 #ifndef RISCV_ENABLE_DUAL_ENDIAN
   if (cfg->endianness != endianness_little) {
-    fputs("Big-endian support has not been prroperly enabled; "
+    fputs("Big-endian support has not been properly enabled; "
           "please rebuild the riscv-isa-sim project using "
           "\"configure --enable-dual-endian\".\n",
           stderr);
@@ -98,7 +100,7 @@ sim_t::sim_t(const cfg_t *cfg, bool halted,
   }
 #endif
 
-  debug_mmu = new mmu_t(this, cfg->endianness, NULL);
+  debug_mmu = new mmu_t(this, cfg->endianness, NULL, cfg->cache_blocksz);
 
   // When running without using a dtb, skip the fdt-based configuration steps
   if (!dtb_enabled) {
@@ -107,6 +109,14 @@ sim_t::sim_t(const cfg_t *cfg, bool halted,
                                       cfg, this, cfg->hartids[i], halted,
                                       log_file.get(), sout_));
       harts[cfg->hartids[i]] = procs[i];
+    }
+    for (auto& x : mems) {
+      bus.add_device(x.first, x.second);
+    }
+    for (auto& pair : harts) {
+      if (auto pc = cfg->start_pc.get(pair.first)) {
+        pair.second->get_state()->pc = *pc;
+      }
     }
     return;
   } // otherwise, generate the procs by parsing the DTS
@@ -120,12 +130,9 @@ sim_t::sim_t(const cfg_t *cfg, bool halted,
   // particular, the default device tree configuration that you get without
   // setting the dtb_file argument has one.
   std::vector<device_factory_sargs_t> device_factories = {
-    {clint_factory, {}}, // clint must be element 0
-    {plic_factory, {}}, // plic must be element 1
+    {clint_factory, {}},
+    {plic_factory, {}},
     {ns16550_factory, {}}};
-  device_factories.insert(device_factories.end(),
-                          plugin_device_factories.begin(),
-                          plugin_device_factories.end());
 
   // Load dtb_file if provided, otherwise self-generate a dts/dtb
   if (dtb_file) {
@@ -137,9 +144,7 @@ sim_t::sim_t(const cfg_t *cfg, bool halted,
     std::stringstream strstream;
     strstream << fin.rdbuf();
     dtb = strstream.str();
-    dts = dtb_to_dts(dtb);
   } else {
-    std::pair<reg_t, reg_t> initrd_bounds = cfg->initrd_bounds;
     std::string device_nodes;
     for (const device_factory_sargs_t& factory_sargs: device_factories) {
       const device_factory_t* factory = factory_sargs.first;
@@ -217,16 +222,16 @@ sim_t::sim_t(const cfg_t *cfg, bool halted,
     // handle mmu-type
     const char *mmu_type;
     rc = fdt_parse_mmu_type(fdt, cpu_offset, &mmu_type);
+    procs[cpu_idx]->set_max_vaddr_bits(0);
     if (rc == 0) {
-      procs[cpu_idx]->set_mmu_capability(IMPL_MMU_SBARE);
       if (strncmp(mmu_type, "riscv,sv32", strlen("riscv,sv32")) == 0) {
-        procs[cpu_idx]->set_mmu_capability(IMPL_MMU_SV32);
+        procs[cpu_idx]->set_max_vaddr_bits(32);
       } else if (strncmp(mmu_type, "riscv,sv39", strlen("riscv,sv39")) == 0) {
-        procs[cpu_idx]->set_mmu_capability(IMPL_MMU_SV39);
+        procs[cpu_idx]->set_max_vaddr_bits(39);
       } else if (strncmp(mmu_type, "riscv,sv48", strlen("riscv,sv48")) == 0) {
-        procs[cpu_idx]->set_mmu_capability(IMPL_MMU_SV48);
+        procs[cpu_idx]->set_max_vaddr_bits(48);
       } else if (strncmp(mmu_type, "riscv,sv57", strlen("riscv,sv57")) == 0) {
-        procs[cpu_idx]->set_mmu_capability(IMPL_MMU_SV57);
+        procs[cpu_idx]->set_max_vaddr_bits(57);
       } else if (strncmp(mmu_type, "riscv,sbare", strlen("riscv,sbare")) == 0) {
         // has been set in the beginning
       } else {
@@ -236,11 +241,34 @@ sim_t::sim_t(const cfg_t *cfg, bool halted,
                   << mmu_type << ").\n";
         exit(1);
       }
-    } else {
-      procs[cpu_idx]->set_mmu_capability(IMPL_MMU_SBARE);
     }
 
+    procs[cpu_idx]->reset();
+
     cpu_idx++;
+  }
+
+  if (dtb_discovery)
+  {
+    //Add dtb discovered devices
+    std::vector<device_factory_sargs_t> dtb_discovery_plugin_device_factories;
+    dtb_discovery::discover_devices_from_dtb(fdt, dtb_discovery_plugin_device_factories);
+    device_factories.insert(device_factories.end(),
+                          dtb_discovery_plugin_device_factories.begin(),
+                          dtb_discovery_plugin_device_factories.end());
+
+    //Remove default memories and use dtb discovered memories
+    mems.clear();
+    dtb_discovery::discover_memory_from_dtb(fdt, mems);
+  }
+  //clint, plic, ns16550 are always discovered via dtb, independently from the --dtb_discovery flag
+  device_factories.insert(device_factories.end(),
+                          plugin_device_factories.begin(),
+                          plugin_device_factories.end());
+
+  for (auto& x : mems)
+  {
+      bus.add_device(x.first, x.second);
   }
 
   // must be located after procs/harts are set (devices might use sim_t get_* member functions)
@@ -254,10 +282,21 @@ sim_t::sim_t(const cfg_t *cfg, bool halted,
       std::shared_ptr<abstract_device_t> dev_ptr(device);
       add_device(device_base, dev_ptr);
 
-      if (i == 0) // clint_factory
+      if (dynamic_cast<clint_t*>(&*dev_ptr)) {
+        assert(!clint);
         clint = std::static_pointer_cast<clint_t>(dev_ptr);
-      else if (i == 1) // plic_factory
+      }
+
+      if (dynamic_cast<plic_t*>(&*dev_ptr)) {
+        assert(!plic);
         plic = std::static_pointer_cast<plic_t>(dev_ptr);
+      }
+    }
+  }
+
+  for (auto& pair : harts) {
+    if (auto pc = cfg->start_pc.get(pair.first)) {
+      pair.second->get_state()->pc = *pc;
     }
   }
 }
@@ -274,7 +313,7 @@ int sim_t::run()
   if (!debug && log)
     set_procs_debug(true);
 
-  htif_t::set_expected_xlen(harts[0]->get_isa().get_max_xlen());
+  htif_t::set_expected_xlen(harts.begin()->second->get_isa().get_max_xlen());
 
   // htif_t::run() will repeatedly call back into sim_t::idle(), each
   // invocation of which will advance target time
@@ -301,7 +340,10 @@ void sim_t::step(size_t n)
     }
   }
 }
-
+const char* sim_t::get_dts() {
+  dts = dtb_to_dts(dtb);
+  return dts.c_str(); 
+}
 void sim_t::add_device(reg_t addr, std::shared_ptr<abstract_device_t> dev) {
   bus.add_device(addr, dev.get());
   devices.push_back(dev);
@@ -338,21 +380,21 @@ void sim_t::set_procs_debug(bool value)
     procs[i]->set_debug(value);
 }
 
-static bool paddr_ok(reg_t addr)
+bool sim_t::is_debug_module_access(reg_t paddr, size_t len)
 {
-  return (addr >> MAX_PADDR_BITS) == 0;
+  return bus.find_device(paddr, len).second == &debug_module;
 }
 
 bool sim_t::mmio_load(reg_t paddr, size_t len, uint8_t* bytes)
 {
-  if (paddr + len < paddr || !paddr_ok(paddr + len - 1))
+  if (paddr + len < paddr)
     return false;
   return bus.load(paddr, len, bytes);
 }
 
 bool sim_t::mmio_store(reg_t paddr, size_t len, const uint8_t* bytes)
 {
-  if (paddr + len < paddr || !paddr_ok(paddr + len - 1))
+  if (paddr + len < paddr)
     return false;
   return bus.store(paddr, len, bytes);
 }
@@ -366,7 +408,7 @@ void sim_t::set_rom()
 {
   const int reset_vec_size = 8;
 
-  reg_t start_pc = cfg->start_pc.value_or(get_entry_point());
+  reg_t start_pc = cfg->start_pc.get(0).value_or(get_entry_point());
 
   uint32_t reset_vec[reset_vec_size] = {
     0x297,                                      // auipc  t0,0x0
@@ -408,13 +450,20 @@ void sim_t::set_rom()
 }
 
 char* sim_t::addr_to_mem(reg_t paddr) {
-  if (!paddr_ok(paddr))
-    return NULL;
-  auto desc = bus.find_device(paddr);
-  if (auto mem = dynamic_cast<abstract_mem_t*>(desc.second))
-    if (paddr - desc.first < mem->size())
-      return mem->contents(paddr - desc.first);
-  return NULL;
+  auto page_offset = paddr % PGSIZE;
+  auto page_addr = paddr - page_offset;
+
+  if (auto it = addr_to_mem_cache.find(page_addr); it != addr_to_mem_cache.end())
+    return it->second + page_offset;
+
+  auto desc = bus.find_device(page_addr, PGSIZE);
+  if (auto mem = dynamic_cast<abstract_mem_t*>(desc.second)) {
+    auto res = mem->contents(page_addr - desc.first);
+    addr_to_mem_cache.insert({page_addr, res});
+    return res + page_offset;
+  }
+
+  return nullptr;
 }
 
 const char* sim_t::get_symbol(uint64_t paddr)
@@ -437,8 +486,19 @@ void sim_t::idle()
 
   if (debug || ctrlc_pressed)
     interactive();
-  else
+  else {
+    if (instruction_limit.has_value()) {
+      if (*instruction_limit < INTERLEAVE) {
+        // Final step.
+        step(*instruction_limit);
+        htif_exit(0);
+        *instruction_limit = 0;
+        return;
+      }
+      *instruction_limit -= INTERLEAVE;
+    }
     step(INTERLEAVE);
+  }
 
   if (remote_bitbang)
     remote_bitbang->tick();
@@ -467,4 +527,9 @@ endianness_t sim_t::get_target_endianness() const
 void sim_t::proc_reset(unsigned id)
 {
   debug_module.proc_reset(id);
+  if (harts.count(id)) {
+    if (auto pc = cfg->start_pc.get(id)) {
+      harts[id]->get_state()->pc = *pc;
+    }
+  }
 }

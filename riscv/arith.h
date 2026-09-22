@@ -32,15 +32,15 @@ inline uint64_t mulhu(uint64_t a, uint64_t b)
 inline int64_t mulh(int64_t a, int64_t b)
 {
   int negate = (a < 0) != (b < 0);
-  uint64_t res = mulhu(a < 0 ? -a : a, b < 0 ? -b : b);
+  uint64_t res = mulhu(a < 0 ? -(uint64_t)a : a, b < 0 ? -(uint64_t)b : b);
   return negate ? ~res + ((uint64_t)a * (uint64_t)b == 0) : res;
 }
 
 inline int64_t mulhsu(int64_t a, uint64_t b)
 {
   int negate = a < 0;
-  uint64_t res = mulhu(a < 0 ? -a : a, b);
-  return negate ? ~res + (a * b == 0) : res;
+  uint64_t res = mulhu(a < 0 ? -(uint64_t)a : a, b);
+  return negate ? ~res + ((uint64_t)a * b == 0) : res;
 }
 
 //ref:  https://locklessinc.com/articles/sat_arithmetic/
@@ -240,6 +240,15 @@ static inline T rotate_left(T x, std::size_t shiftamt) {
   const std::size_t lshift = shiftamt & mask;
   const std::size_t rshift = (-lshift) & mask;
   return (x << lshift) | (x >> rshift);
+}
+
+template<typename out_t, typename in1_t, typename in2_t>
+static inline out_t dot_product(const in1_t* a, const in2_t* b, size_t n)
+{
+  out_t res = 0;
+  for (size_t i = 0; i < n; i++)
+    res += (out_t)a[i] * (out_t)b[i];
+  return res;
 }
 
 #endif

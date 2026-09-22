@@ -55,11 +55,11 @@ jobs:
           # Get current date (UTC+8)
           TZ='Asia/Shanghai' year=$(date +%Y)
           TZ='Asia/Shanghai' month=$(date +%m)
-          
+
           # Find all version in this year/month with 'v' prefix and 'r' suffix
           prefix="v${year}.${month}.r"
           existing_tags=$(git tag -l "${prefix}*" | sort -V)
-          
+
           if [ -z "$existing_tags" ]; then
             # No version in this year/month, start from 1
             micro=1
@@ -69,7 +69,7 @@ jobs:
             last_micro=$(echo "$last_tag" | sed "s/${prefix}//")
             micro=$((last_micro + 1))
           fi
-          
+
           new_tag="v${year}.${month}.r${micro}"
           echo "New tag: $new_tag"
           echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
@@ -125,15 +125,15 @@ jobs:
           micro=$(echo "$version_num" | sed 's/.*r//')
           month_name=$(date -d "${year}-${month}-01" +"%B")
           release_date=$(TZ='Asia/Shanghai' date +"%B %-d, %Y")
-          
+
           cat > RELEASE_NOTES.md << EOF
           Release ${new_tag} is the ${micro}th release in ${month_name} ${year}, released on ${release_date}.
-          
+
           ## Artifacts
           The release includes pre-compiled SPIKE shared objects for different configurations:
           - Compilation Platform: Ubuntu 20.04 (compatible with CentOS 7)
           - CPU: xiangshan, nutshell, rocket_chip
-          
+
           Each artifact is named as: \`spike-{version}-{cpu}-ref.so\`
           EOF
 

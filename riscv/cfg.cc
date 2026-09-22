@@ -38,7 +38,6 @@ cfg_t::cfg_t()
   bootargs         = nullptr;
   isa              = DEFAULT_ISA;
   priv             = DEFAULT_PRIV;
-  misaligned       = false;
   endianness       = endianness_little;
   pmpregions       = 16;
   pmpgranularity   = (1 << PMP_SHIFT);
@@ -47,4 +46,27 @@ cfg_t::cfg_t()
   explicit_hartids = false;
   real_time_clint  = false;
   trigger_count    = 4;
+  cache_blocksz    = 64;
+  force_override   = false;
+}
+
+void start_pc_t::set_global(reg_t pc)
+{
+  global_pc = pc;
+}
+
+void start_pc_t::set_override(size_t hart_id, reg_t pc)
+{
+  hart_pcs[hart_id] = pc;
+}
+
+std::optional<reg_t> start_pc_t::get(size_t hart_id) const
+{
+  auto it = hart_pcs.find(hart_id);
+
+  if (it != hart_pcs.end()) {
+    return it->second;
+  } else {
+    return global_pc;
+  }
 }

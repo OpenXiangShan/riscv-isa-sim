@@ -53,6 +53,12 @@ struct : public arg_t {
 
 struct : public arg_t {
   std::string to_string(insn_t insn) const {
+    return std::string("(") + xpr_name[insn.rs2()] + ')';
+  }
+} base_rs2_address;
+
+struct : public arg_t {
+  std::string to_string(insn_t insn) const {
     return xpr_name[insn.rd()];
   }
 } xrd;
@@ -120,6 +126,31 @@ struct : public arg_t {
     return xpr_name[insn.rs3()];
   }
 } xrs3;
+
+// RV32 P-extension register pair arguments (even register number)
+struct : public arg_t {
+  std::string to_string(insn_t insn) const {
+    return xpr_name[insn.rd_p()];
+  }
+} xrd_p;
+
+struct : public arg_t {
+  std::string to_string(insn_t insn) const {
+    return xpr_name[insn.rs1_p()];
+  }
+} xrs1_p;
+
+struct : public arg_t {
+  std::string to_string(insn_t insn) const {
+    return xpr_name[insn.rs2_p()];
+  }
+} xrs2_p;
+
+struct : public arg_t {
+  std::string to_string(insn_t insn) const {
+    return frm_name(insn.rm());
+  }
+} rm;
 
 struct : public arg_t {
   std::string to_string(insn_t insn) const {
@@ -449,6 +480,19 @@ struct : public arg_t {
 } vm;
 
 struct : public arg_t {
+  std::string to_string(insn_t insn) const {
+    return vr_name[insn.rs2() & -8];
+  }
+} bdota_vs2;
+
+struct : public arg_t {
+  std::string to_string(insn_t insn) const {
+    int ci = 8 * (insn.rs2() % 8);
+    return std::to_string(ci);
+  }
+} bdota_ci;
+
+struct : public arg_t {
   std::string to_string(insn_t UNUSED insn) const {
     return "v0";
   }
@@ -532,33 +576,57 @@ struct : public arg_t {
 
 struct : public arg_t {
   std::string to_string(insn_t insn) const {
-    return std::to_string((int)insn.p_imm2());
+    return std::to_string((int)insn.p_imm8());
   }
-} p_imm2;
+} p_imm8;
 
 struct : public arg_t {
   std::string to_string(insn_t insn) const {
-    return std::to_string((int)insn.p_imm3());
+    return std::to_string((int)insn.p_imm10csl());
   }
-} p_imm3;
+} p_imm10csl;
 
 struct : public arg_t {
   std::string to_string(insn_t insn) const {
-    return std::to_string((int)insn.p_imm4());
+    return std::to_string((int)insn.p_imm10csr());
   }
-} p_imm4;
+} p_imm10csr;
 
 struct : public arg_t {
   std::string to_string(insn_t insn) const {
-    return std::to_string((int)insn.p_imm5());
+    return std::to_string((int)insn.p_imm10csrw());
   }
-} p_imm5;
+} p_imm10csrw;
 
 struct : public arg_t {
   std::string to_string(insn_t insn) const {
-    return std::to_string((int)insn.p_imm6());
+    return std::to_string((int)insn.shamtd());
   }
-} p_imm6;
+} shamtd;
+
+struct : public arg_t {
+  std::string to_string(insn_t insn) const {
+    return std::to_string((int)insn.shamtw());
+  }
+} shamtw;
+
+struct : public arg_t {
+  std::string to_string(insn_t insn) const {
+    return std::to_string((int)insn.shamth());
+  }
+} shamth;
+
+struct : public arg_t {
+  std::string to_string(insn_t insn) const {
+    return std::to_string((int)insn.shamtb());
+  }
+} shamtb;
+
+struct : public arg_t {
+  std::string to_string(insn_t insn) const {
+    return std::to_string((int)insn.b_imm5());
+  }
+} b_imm5;
 
 struct : public arg_t {
   std::string to_string(insn_t insn) const {
@@ -605,6 +673,44 @@ static void NOINLINE add_r3type_insn(disassembler_t* d, const char* name, uint32
   d->add_insn(new disasm_insn_t(name, match, mask, {&xrd, &xrs1, &xrs2, &xrs3}));
 }
 
+// RV32 P-extension register pair instruction types
+// Type 1: rdp only (widening: result is pair, sources are normal regs)
+static void NOINLINE add_rtype_rdp_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
+{
+  d->add_insn(new disasm_insn_t(name, match, mask, {&xrd_p, &xrs1, &xrs2}));
+}
+
+// Type 1 variant: rdp + rs1 only (for unary widening ops)
+static void NOINLINE add_r1type_rdp_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
+{
+  d->add_insn(new disasm_insn_t(name, match, mask, {&xrd_p, &xrs1}));
+}
+
+// Type 1 variant: rdp + rs1 + imm (for widening immediate ops)
+// Type 2: rs1p only (narrowing: source is pair, result is normal reg)
+static void NOINLINE add_rtype_rs1p_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
+{
+  d->add_insn(new disasm_insn_t(name, match, mask, {&xrd, &xrs1_p, &xrs2}));
+}
+
+// Type 3: rdp + rs1p (both pairs, with scalar rs2)
+static void NOINLINE add_rtype_rdp_rs1p_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
+{
+  d->add_insn(new disasm_insn_t(name, match, mask, {&xrd_p, &xrs1_p, &xrs2}));
+}
+
+// Type 3 variant: rdp + rs1p only (for unary doubleword ops)
+static void NOINLINE add_r1type_rdp_rs1p_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
+{
+  d->add_insn(new disasm_insn_t(name, match, mask, {&xrd_p, &xrs1_p}));
+}
+
+// Type 4: rdp + rs1p + rs2p (all three are register pairs)
+static void NOINLINE add_rtype_pair_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
+{
+  d->add_insn(new disasm_insn_t(name, match, mask, {&xrd_p, &xrs1_p, &xrs2_p}));
+}
+
 static void NOINLINE add_itype_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
 {
   d->add_insn(new disasm_insn_t(name, match, mask, {&xrd, &xrs1, &imm}));
@@ -637,12 +743,28 @@ static void NOINLINE add_fstore_insn(disassembler_t* d, const char* name, uint32
 
 static void NOINLINE add_xamo_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
 {
-  d->add_insn(new disasm_insn_t(name, match, mask, {&xrd, &xrs2, &base_only_address}));
+  const char *suffix[] = {"", ".rl", ".aq", ".aqrl"};
+  char new_name[128];
+  uint32_t new_mask = mask | (0x3 << 25);
+  uint32_t new_match;
+
+  for (uint32_t idx = 0; idx < sizeof(suffix) / sizeof(suffix[0]); ++idx) {
+    snprintf(new_name, sizeof(new_name), "%s%s", name, suffix[idx]);
+    new_match = match | (idx << 25);
+
+    d->add_insn(new disasm_insn_t(new_name, new_match, new_mask, {&xrd, &xrs2, &base_only_address}));
+  }
 }
 
 static void NOINLINE add_xlr_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
 {
   d->add_insn(new disasm_insn_t(name, match, mask, {&xrd, &base_only_address}));
+}
+
+static void NOINLINE add_zilx_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
+{
+  // Zilx assembly syntax: mnemonic rd, (rs2), rs1  (rs2 is base, rs1 is index)
+  d->add_insn(new disasm_insn_t(name, match, mask, {&xrd, &base_rs2_address, &xrs1}));
 }
 
 static void NOINLINE add_xst_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
@@ -653,6 +775,11 @@ static void NOINLINE add_xst_insn(disassembler_t* d, const char* name, uint32_t 
 static void NOINLINE add_btype_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
 {
   d->add_insn(new disasm_insn_t(name, match, mask, {&xrs1, &xrs2, &branch_target}));
+}
+
+static void NOINLINE add_bimmtype_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
+{
+  d->add_insn(new disasm_insn_t(name, match, mask, {&xrs1, &b_imm5, &branch_target}));
 }
 
 static void NOINLINE add_b1type_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
@@ -696,6 +823,11 @@ static void NOINLINE add_fx2type_insn(disassembler_t* d, const char* name, uint3
   d->add_insn(new disasm_insn_t(name, match, mask, {&xrd, &frs1, &frs2}));
 }
 
+static void NOINLINE add_fxrtype_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
+{
+  d->add_insn(new disasm_insn_t(name, match, mask, {&xrd, &frs1, &rm}));
+}
+
 static void NOINLINE add_flitype_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
 {
   d->add_insn(new disasm_insn_t(name, match, mask, {&xrd, &fli_imm}));
@@ -706,26 +838,6 @@ static void NOINLINE add_sfence_insn(disassembler_t* d, const char* name, uint32
   d->add_insn(new disasm_insn_t(name, match, mask, {&xrs1, &xrs2}));
 }
 
-static void NOINLINE add_pitype3_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
-{
-  d->add_insn(new disasm_insn_t(name, match, mask, {&xrd, &xrs1, &p_imm3}));
-}
-
-static void NOINLINE add_pitype4_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
-{
-  d->add_insn(new disasm_insn_t(name, match, mask, {&xrd, &xrs1, &p_imm4}));
-}
-
-static void NOINLINE add_pitype5_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
-{
-  d->add_insn(new disasm_insn_t(name, match, mask, {&xrd, &xrs1, &p_imm5}));
-}
-
-static void NOINLINE add_pitype6_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
-{
-  d->add_insn(new disasm_insn_t(name, match, mask, {&xrd, &xrs1, &p_imm6}));
-}
-
 static void NOINLINE add_vector_v_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
 {
   d->add_insn(new disasm_insn_t(name, match, mask, {&vd, &vs2, opt, &vm}));
@@ -734,6 +846,11 @@ static void NOINLINE add_vector_v_insn(disassembler_t* d, const char* name, uint
 static void NOINLINE add_vector_vv_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
 {
   d->add_insn(new disasm_insn_t(name, match, mask, {&vd, &vs2, &vs1, opt, &vm}));
+}
+
+static void NOINLINE add_vector_bdota_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
+{
+  d->add_insn(new disasm_insn_t(name, match, mask, {&vd, &bdota_vs2, &vs1, &bdota_ci, opt, &vm}));
 }
 
 static void NOINLINE add_vector_multiplyadd_vv_insn(disassembler_t* d, const char* name, uint32_t match, uint32_t mask)
@@ -809,7 +926,12 @@ static void NOINLINE add_unknown_insns(disassembler_t* d)
   #undef DECLARE_INSN
 }
 
-void disassembler_t::add_instructions(const isa_parser_t* isa)
+#define ext_enabled_strict(x) (isa->extension_enabled(x))
+#define ext_enabled(x) (ext_enabled_strict(x) || !strict)
+#define xlen_eq(x) (xlen_eq_strict(x) || !strict)
+#define xlen_eq_strict(x) (isa->get_max_xlen() == (x))
+
+void disassembler_t::add_instructions(const isa_parser_t* isa, bool strict)
 {
   const uint32_t mask_rd = 0x1fUL << 7;
   const uint32_t match_rd_ra = 1UL << 7;
@@ -826,6 +948,8 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
   const uint32_t mask_vldst = 0x7Ul << 12 | 0x1UL << 28;
   const uint32_t mask_amoop = 0x1fUl << 27;
   const uint32_t mask_width = 0x7Ul << 12;
+  const uint32_t mask_shamt_msb = 0x1Ul << 25;
+  const uint32_t mask_rvc_shamt_msb = 0x1Ul << 12;
 
   #define DECLARE_INSN(code, match, mask) \
    const uint32_t match_##code = match; \
@@ -841,19 +965,39 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
   #define DEFINE_R1TYPE(code) add_r1type_insn(this, #code, match_##code, mask_##code);
   #define DEFINE_R3TYPE(code) add_r3type_insn(this, #code, match_##code, mask_##code);
   #define DEFINE_ITYPE(code) add_itype_insn(this, #code, match_##code, mask_##code);
-  #define DEFINE_ITYPE_SHIFT(code) add_itype_shift_insn(this, #code, match_##code, mask_##code);
+  // A shift-immediate instruction with a 5-bit shift amount, where instruction
+  // bit 25 is reserved. This is the *w instructions, which always shift a
+  // 32-bit value, and on RV32 every shift-immediate instruction.
+  #define DEFINE_ITYPE_SHIFTW(code) add_itype_shift_insn(this, #code, match_##code, mask_##code | mask_shamt_msb);
+  // A shift-immediate instruction whose shift amount is XLEN wide.
+  #define DEFINE_ITYPE_SHIFT(code) if (xlen_eq(64)) { add_itype_shift_insn(this, #code, match_##code, mask_##code); } else { DEFINE_ITYPE_SHIFTW(code) }
+  // RV32 P-extension register pair macros
+  #define DEFINE_RTYPE_RDP(code) add_rtype_rdp_insn(this, #code, match_##code, mask_##code);
+  #define DEFINE_R1TYPE_RDP(code) add_r1type_rdp_insn(this, #code, match_##code, mask_##code);
+  #define DEFINE_ITYPE_RDP(code) add_itype_rdp_insn(this, #code, match_##code, mask_##code);
+  #define DEFINE_ITYPE_SHIFT_RDP(code) add_itype_shift_rdp_insn(this, #code, match_##code, mask_##code);
+  #define DEFINE_RTYPE_RS1P(code) add_rtype_rs1p_insn(this, #code, match_##code, mask_##code);
+  #define DEFINE_ITYPE_RS1P(code) add_itype_rs1p_insn(this, #code, match_##code, mask_##code);
+  #define DEFINE_ITYPE_SHIFT_RS1P(code) add_itype_shift_rs1p_insn(this, #code, match_##code, mask_##code);
+  #define DEFINE_RTYPE_RDP_RS1P(code) add_rtype_rdp_rs1p_insn(this, #code, match_##code, mask_##code);
+  #define DEFINE_R1TYPE_RDP_RS1P(code) add_r1type_rdp_rs1p_insn(this, #code, match_##code, mask_##code);
+  #define DEFINE_ITYPE_RDP_RS1P(code) add_itype_rdp_rs1p_insn(this, #code, match_##code, mask_##code);
+  #define DEFINE_ITYPE_SHIFT_RDP_RS1P(code) add_itype_shift_rdp_rs1p_insn(this, #code, match_##code, mask_##code);
+  #define DEFINE_RTYPE_PAIR(code) add_rtype_pair_insn(this, #code, match_##code, mask_##code);
   #define DEFINE_I0TYPE(name, code) DISASM_INSN(name, code, mask_rs1, {&xrd, &imm})
   #define DEFINE_I1TYPE(name, code) DISASM_INSN(name, code, mask_imm, {&xrd, &xrs1})
   #define DEFINE_I2TYPE(name, code) DISASM_INSN(name, code, mask_rd | mask_imm, {&xrs1})
   #define DEFINE_PREFETCH(code) DISASM_INSN(#code, code, 0, {&store_address})
   #define DEFINE_LTYPE(code) DISASM_INSN(#code, code, 0, {&xrd, &bigimm})
   #define DEFINE_BTYPE(code) add_btype_insn(this, #code, match_##code, mask_##code);
+  #define DEFINE_BIMMTYPE(code) add_bimmtype_insn(this, #code, match_##code, mask_##code);
   #define DEFINE_B1TYPE(name, code) add_b1type_insn(this, name, match_##code, mask_##code);
   #define DEFINE_XLOAD(code) add_xload_insn(this, #code, match_##code, mask_##code);
   #define DEFINE_XSTORE(code) add_xstore_insn(this, #code, match_##code, mask_##code);
   #define DEFINE_XAMO(code) add_xamo_insn(this, #code, match_##code, mask_##code);
   #define DEFINE_XLOAD_BASE(code) add_xlr_insn(this, #code, match_##code, mask_##code);
   #define DEFINE_XSTORE_BASE(code) add_xst_insn(this, #code, match_##code, mask_##code);
+  #define DEFINE_ZILX(code) add_zilx_insn(this, #code, match_##code, mask_##code);
   #define DEFINE_FLOAD(code) add_fload_insn(this, #code, match_##code, mask_##code);
   #define DEFINE_FSTORE(code) add_fstore_insn(this, #code, match_##code, mask_##code);
   #define DEFINE_FRTYPE(code) add_frtype_insn(this, #code, match_##code, mask_##code);
@@ -861,6 +1005,7 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
   #define DEFINE_FR3TYPE(code) add_fr3type_insn(this, #code, match_##code, mask_##code);
   #define DEFINE_FXTYPE(code) add_fxtype_insn(this, #code, match_##code, mask_##code);
   #define DEFINE_FX2TYPE(code) add_fx2type_insn(this, #code, match_##code, mask_##code);
+  #define DEFINE_FXRTYPE(code) add_fxrtype_insn(this, #code, match_##code, mask_##code);
   #define DEFINE_FLITYPE(code) add_flitype_insn(this, #code, match_##code, mask_##code);
   #define DEFINE_XFTYPE(code) add_xftype_insn(this, #code, match_##code, mask_##code);
   #define DEFINE_XF2TYPE(code) add_xf2type_insn(this, #code, match_##code, mask_##code);
@@ -882,16 +1027,19 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
   DEFINE_XLOAD(lh)
   DEFINE_XLOAD(lhu)
   DEFINE_XLOAD(lw)
-  DEFINE_XLOAD(lwu)
-  DEFINE_XLOAD(ld)
 
   DEFINE_XSTORE(sb)
   DEFINE_XSTORE(sh)
   DEFINE_XSTORE(sw)
-  DEFINE_XSTORE(sd)
 
-  if (isa->extension_enabled('A') ||
-      isa->extension_enabled(EXT_ZAAMO)) {
+  if (xlen_eq(64)) {
+    DEFINE_XLOAD(lwu)
+    DEFINE_XLOAD(ld)
+
+    DEFINE_XSTORE(sd)
+  }
+
+  if (ext_enabled(EXT_ZAAMO)) {
     DEFINE_XAMO(amoadd_w)
     DEFINE_XAMO(amoswap_w)
     DEFINE_XAMO(amoand_w)
@@ -901,32 +1049,39 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DEFINE_XAMO(amomax_w)
     DEFINE_XAMO(amominu_w)
     DEFINE_XAMO(amomaxu_w)
-    DEFINE_XAMO(amoadd_d)
-    DEFINE_XAMO(amoswap_d)
-    DEFINE_XAMO(amoand_d)
-    DEFINE_XAMO(amoor_d)
-    DEFINE_XAMO(amoxor_d)
-    DEFINE_XAMO(amomin_d)
-    DEFINE_XAMO(amomax_d)
-    DEFINE_XAMO(amominu_d)
-    DEFINE_XAMO(amomaxu_d)
+
+    if (xlen_eq(64)) {
+      DEFINE_XAMO(amoadd_d)
+      DEFINE_XAMO(amoswap_d)
+      DEFINE_XAMO(amoand_d)
+      DEFINE_XAMO(amoor_d)
+      DEFINE_XAMO(amoxor_d)
+      DEFINE_XAMO(amomin_d)
+      DEFINE_XAMO(amomax_d)
+      DEFINE_XAMO(amominu_d)
+      DEFINE_XAMO(amomaxu_d)
+    }
   }
 
-  if (isa->extension_enabled('A') ||
-      isa->extension_enabled(EXT_ZALRSC)) {
+  if (ext_enabled(EXT_ZALRSC)) {
     DEFINE_XLOAD_BASE(lr_w)
     DEFINE_XAMO(sc_w)
-    DEFINE_XLOAD_BASE(lr_d)
-    DEFINE_XAMO(sc_d)
+
+    if (xlen_eq(64)) {
+      DEFINE_XLOAD_BASE(lr_d)
+      DEFINE_XAMO(sc_d)
+    }
   }
 
-  if (isa->extension_enabled(EXT_ZACAS)) {
+  if (ext_enabled(EXT_ZACAS)) {
     DEFINE_XAMO(amocas_w)
     DEFINE_XAMO(amocas_d)
-    DEFINE_XAMO(amocas_q)
+
+    if (xlen_eq(64))
+      DEFINE_XAMO(amocas_q)
   }
 
-  if (isa->extension_enabled(EXT_ZABHA)) {
+  if (ext_enabled(EXT_ZABHA)) {
     DEFINE_XAMO(amoadd_b)
     DEFINE_XAMO(amoswap_b)
     DEFINE_XAMO(amoand_b)
@@ -949,12 +1104,50 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DEFINE_XAMO(amocas_h)
   }
 
-  if (isa->extension_enabled(EXT_ZAWRS)) {
+  if (ext_enabled(EXT_ZAWRS)) {
     DEFINE_NOARG(wrs_sto);
     DEFINE_NOARG(wrs_nto);
   }
 
-  if (isa->extension_enabled(EXT_ZICFILP)) {
+  if (ext_enabled(EXT_ZILX)) {
+    // `lxb`/`lxbu` are assembler pseudoinstructions for `lxsb`/`lxsbu`; add
+    // them first so they win when disassembling the shared encoding.
+    add_zilx_insn(this, "lxb", match_lxsb, mask_lxsb);
+    add_zilx_insn(this, "lxbu", match_lxsbu, mask_lxsbu);
+
+    // unscaled indexed loads
+    DEFINE_ZILX(lxh)
+    DEFINE_ZILX(lxw)
+    DEFINE_ZILX(lxhu)
+
+    // scaled indexed loads
+    DEFINE_ZILX(lxsb)
+    DEFINE_ZILX(lxsh)
+    DEFINE_ZILX(lxsw)
+    DEFINE_ZILX(lxsbu)
+    DEFINE_ZILX(lxshu)
+
+    if (xlen_eq(64)) {
+      // unscaled indexed loads (RV64-only widths)
+      DEFINE_ZILX(lxd)
+      DEFINE_ZILX(lxwu)
+
+      // scaled indexed loads (RV64-only widths)
+      DEFINE_ZILX(lxsd)
+      DEFINE_ZILX(lxswu)
+
+      // scaled indexed loads with zero-extended 32-bit index (RV64-only)
+      DEFINE_ZILX(lxsuwb)
+      DEFINE_ZILX(lxsuwh)
+      DEFINE_ZILX(lxsuww)
+      DEFINE_ZILX(lxsuwd)
+      DEFINE_ZILX(lxsuwbu)
+      DEFINE_ZILX(lxsuwhu)
+      DEFINE_ZILX(lxsuwwu)
+    }
+  }
+
+  if (ext_enabled(EXT_ZICFILP)) {
     // lpad encodes as `auipc x0, label`, so it needs to be added before auipc
     // for higher disassembling priority
     DISASM_INSN("lpad", lpad, 0, {&bigimm});
@@ -999,12 +1192,21 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
 
   DEFINE_ITYPE(ori);
   DEFINE_ITYPE(andi);
-  DEFINE_I1TYPE("sext.w", addiw);
-  DEFINE_ITYPE(addiw);
 
-  DEFINE_ITYPE_SHIFT(slliw);
-  DEFINE_ITYPE_SHIFT(srliw);
-  DEFINE_ITYPE_SHIFT(sraiw);
+  if (xlen_eq(64)) {
+    DEFINE_I1TYPE("sext.w", addiw);
+    DEFINE_ITYPE(addiw);
+
+    DEFINE_ITYPE_SHIFTW(slliw);
+    DEFINE_ITYPE_SHIFTW(srliw);
+    DEFINE_ITYPE_SHIFTW(sraiw);
+
+    DEFINE_RTYPE(addw);
+    DEFINE_RTYPE(subw);
+    DEFINE_RTYPE(sllw);
+    DEFINE_RTYPE(srlw);
+    DEFINE_RTYPE(sraw);
+  }
 
   DEFINE_RTYPE(add);
   DEFINE_RTYPE(sub);
@@ -1017,11 +1219,6 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
   DEFINE_RTYPE(sra);
   DEFINE_RTYPE(or);
   DEFINE_RTYPE(and);
-  DEFINE_RTYPE(addw);
-  DEFINE_RTYPE(subw);
-  DEFINE_RTYPE(sllw);
-  DEFINE_RTYPE(srlw);
-  DEFINE_RTYPE(sraw);
 
   DEFINE_NOARG(ecall);
   DEFINE_NOARG(ebreak);
@@ -1045,32 +1242,35 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
   add_insn(new disasm_insn_t("csrrsi", match_csrrsi, mask_csrrsi, {&xrd, &csr, &zimm5}));
   add_insn(new disasm_insn_t("csrrci", match_csrrci, mask_csrrci, {&xrd, &csr, &zimm5}));
 
-  if (isa->extension_enabled('S')) {
+  if (ext_enabled('S')) {
     DEFINE_NOARG(sret);
     DEFINE_SFENCE_TYPE(sfence_vma);
   }
 
-  if (isa->extension_enabled('M')) {
+  if (ext_enabled('M')) {
     DEFINE_RTYPE(mul);
     DEFINE_RTYPE(mulh);
     DEFINE_RTYPE(mulhu);
     DEFINE_RTYPE(mulhsu);
-    DEFINE_RTYPE(mulw);
     DEFINE_RTYPE(div);
     DEFINE_RTYPE(divu);
     DEFINE_RTYPE(rem);
     DEFINE_RTYPE(remu);
-    DEFINE_RTYPE(divw);
-    DEFINE_RTYPE(divuw);
-    DEFINE_RTYPE(remw);
-    DEFINE_RTYPE(remuw);
+
+    if (xlen_eq(64)) {
+      DEFINE_RTYPE(mulw);
+      DEFINE_RTYPE(divw);
+      DEFINE_RTYPE(divuw);
+      DEFINE_RTYPE(remw);
+      DEFINE_RTYPE(remuw);
+    }
   }
 
-  if (isa->extension_enabled(EXT_ZBA)) { 
+  if (ext_enabled(EXT_ZBA)) {
     DEFINE_RTYPE(sh1add);
     DEFINE_RTYPE(sh2add);
     DEFINE_RTYPE(sh3add);
-    if (isa->get_max_xlen() == 64) {
+    if (xlen_eq(64)) {
       DEFINE_ITYPE_SHIFT(slli_uw);
       add_insn(new disasm_insn_t("zext.w", match_add_uw, mask_add_uw | mask_rs2, {&xrd, &xrs1}));
       DEFINE_RTYPE(add_uw);
@@ -1080,7 +1280,7 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     }
   }
 
-  if (isa->extension_enabled(EXT_ZBB)) { 
+  if (ext_enabled(EXT_ZBB)) {
     DEFINE_RTYPE(ror);
     DEFINE_RTYPE(rol);
     DEFINE_ITYPE_SHIFT(rori);
@@ -1096,26 +1296,26 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DEFINE_RTYPE(xnor);
     DEFINE_R1TYPE(sext_b);
     DEFINE_R1TYPE(sext_h);
-    add_insn(new disasm_insn_t("rev8", match_grevi | ((isa->get_max_xlen() - 8) << imm_shift), mask_grevi | mask_imm, {&xrd, &xrs1}));
-    add_insn(new disasm_insn_t("orc.b", match_gorci | (0x7 << imm_shift), mask_grevi | mask_imm, {&xrd, &xrs1}));
+    DEFINE_R1TYPE(rev8);
+    DEFINE_R1TYPE(orc_b);
     add_insn(new disasm_insn_t("zext.h", (isa->get_max_xlen() == 32 ? match_pack : match_packw), mask_pack | mask_rs2, {&xrd, &xrs1}));
-    if (isa->get_max_xlen() == 64) {
+    if (xlen_eq(64)) {
       DEFINE_RTYPE(rorw);
       DEFINE_RTYPE(rolw);
-      DEFINE_ITYPE_SHIFT(roriw);
+      DEFINE_ITYPE_SHIFTW(roriw);
       DEFINE_R1TYPE(ctzw);
       DEFINE_R1TYPE(clzw);
       DEFINE_R1TYPE(cpopw);
     }
   }
 
-  if (isa->extension_enabled(EXT_ZBC)) {
+  if (ext_enabled(EXT_ZBC)) {
     DEFINE_RTYPE(clmul);
     DEFINE_RTYPE(clmulh);
     DEFINE_RTYPE(clmulr);
   }
 
-  if (isa->extension_enabled(EXT_ZBS)) { 
+  if (ext_enabled(EXT_ZBS)) {
     DEFINE_RTYPE(bclr);
     DEFINE_RTYPE(binv);
     DEFINE_RTYPE(bset);
@@ -1126,17 +1326,17 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DEFINE_ITYPE_SHIFT(bexti);
   }
 
-  if (isa->extension_enabled(EXT_ZBKB)) {
-    add_insn(new disasm_insn_t("brev8", match_grevi | (0x7 << imm_shift), mask_grevi | mask_imm, {&xrd, &xrs1})); // brev8
-    add_insn(new disasm_insn_t("rev8", match_grevi | ((isa->get_max_xlen() - 8) << imm_shift), mask_grevi | mask_imm, {&xrd, &xrs1}));
+  if (ext_enabled(EXT_ZBKB)) {
+    DEFINE_R1TYPE(brev8);
+    DEFINE_R1TYPE(rev8);
     DEFINE_RTYPE(pack);
     DEFINE_RTYPE(packh);
-    if (isa->get_max_xlen() == 64) {
+    if (xlen_eq(64)) {
       DEFINE_RTYPE(packw);
     }
   }
 
-  if (isa->extension_enabled(EXT_SVINVAL)) {
+  if (ext_enabled(EXT_SVINVAL)) {
     DEFINE_NOARG(sfence_w_inval);
     DEFINE_NOARG(sfence_inval_ir);
     DEFINE_SFENCE_TYPE(sinval_vma);
@@ -1144,9 +1344,14 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DEFINE_SFENCE_TYPE(hinval_gvma);
   }
 
-  if (isa->extension_enabled('F')) {
+  if (ext_enabled('F')) {
     DEFINE_FLOAD(flw)
     DEFINE_FSTORE(fsw)
+    DEFINE_XFTYPE(fmv_w_x);
+    DEFINE_FXTYPE(fmv_x_w);
+  }
+
+  if (ext_enabled('F') || ext_enabled(EXT_ZFINX)) {
     DEFINE_FRTYPE(fadd_s);
     DEFINE_FRTYPE(fsub_s);
     DEFINE_FRTYPE(fmul_s);
@@ -1163,58 +1368,35 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DEFINE_FRTYPE(fsgnjx_s);
     DEFINE_FR1TYPE(fcvt_s_d);
     DEFINE_FR1TYPE(fcvt_s_q);
-    DEFINE_XFTYPE(fcvt_s_l);
-    DEFINE_XFTYPE(fcvt_s_lu);
     DEFINE_XFTYPE(fcvt_s_w);
     DEFINE_XFTYPE(fcvt_s_wu);
     DEFINE_XFTYPE(fcvt_s_wu);
-    DEFINE_XFTYPE(fmv_w_x);
-    DEFINE_FXTYPE(fcvt_l_s);
-    DEFINE_FXTYPE(fcvt_lu_s);
     DEFINE_FXTYPE(fcvt_w_s);
     DEFINE_FXTYPE(fcvt_wu_s);
     DEFINE_FXTYPE(fclass_s);
-    DEFINE_FXTYPE(fmv_x_w);
     DEFINE_FX2TYPE(feq_s);
     DEFINE_FX2TYPE(flt_s);
     DEFINE_FX2TYPE(fle_s);
+
+    if (xlen_eq(64)) {
+      DEFINE_XFTYPE(fcvt_s_l);
+      DEFINE_XFTYPE(fcvt_s_lu);
+      DEFINE_FXTYPE(fcvt_l_s);
+      DEFINE_FXTYPE(fcvt_lu_s);
+    }
   }
 
-  if (isa->extension_enabled(EXT_ZFINX)) {
-    DEFINE_RTYPE(fadd_s);
-    DEFINE_RTYPE(fsub_s);
-    DEFINE_RTYPE(fmul_s);
-    DEFINE_RTYPE(fdiv_s);
-    DEFINE_R1TYPE(fsqrt_s);
-    DEFINE_RTYPE(fmin_s);
-    DEFINE_RTYPE(fmax_s);
-    DEFINE_R3TYPE(fmadd_s);
-    DEFINE_R3TYPE(fmsub_s);
-    DEFINE_R3TYPE(fnmadd_s);
-    DEFINE_R3TYPE(fnmsub_s);
-    DEFINE_RTYPE(fsgnj_s);
-    DEFINE_RTYPE(fsgnjn_s);
-    DEFINE_RTYPE(fsgnjx_s);
-    DEFINE_R1TYPE(fcvt_s_d);
-    //DEFINE_R1TYPE(fcvt_s_q);
-    DEFINE_R1TYPE(fcvt_s_l);
-    DEFINE_R1TYPE(fcvt_s_lu);
-    DEFINE_R1TYPE(fcvt_s_w);
-    DEFINE_R1TYPE(fcvt_s_wu);
-    DEFINE_R1TYPE(fcvt_s_wu);
-    DEFINE_R1TYPE(fcvt_l_s);
-    DEFINE_R1TYPE(fcvt_lu_s);
-    DEFINE_R1TYPE(fcvt_w_s);
-    DEFINE_R1TYPE(fcvt_wu_s);
-    DEFINE_R1TYPE(fclass_s);
-    DEFINE_RTYPE(feq_s);
-    DEFINE_RTYPE(flt_s);
-    DEFINE_RTYPE(fle_s);
-  }
-
-  if (isa->extension_enabled('D')) {
+  if (ext_enabled('D')) {
     DEFINE_FLOAD(fld)
     DEFINE_FSTORE(fsd)
+
+    if (xlen_eq(64)) {
+      DEFINE_XFTYPE(fmv_d_x);
+      DEFINE_FXTYPE(fmv_x_d);
+    }
+  }
+
+  if (ext_enabled('D') || ext_enabled(EXT_ZDINX)) {
     DEFINE_FRTYPE(fadd_d);
     DEFINE_FRTYPE(fsub_d);
     DEFINE_FRTYPE(fmul_d);
@@ -1231,24 +1413,25 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DEFINE_FRTYPE(fsgnjx_d);
     DEFINE_FR1TYPE(fcvt_d_s);
     DEFINE_FR1TYPE(fcvt_d_q);
-    DEFINE_XFTYPE(fcvt_d_l);
-    DEFINE_XFTYPE(fcvt_d_lu);
     DEFINE_XFTYPE(fcvt_d_w);
     DEFINE_XFTYPE(fcvt_d_wu);
     DEFINE_XFTYPE(fcvt_d_wu);
-    DEFINE_XFTYPE(fmv_d_x);
-    DEFINE_FXTYPE(fcvt_l_d);
-    DEFINE_FXTYPE(fcvt_lu_d);
     DEFINE_FXTYPE(fcvt_w_d);
     DEFINE_FXTYPE(fcvt_wu_d);
     DEFINE_FXTYPE(fclass_d);
-    DEFINE_FXTYPE(fmv_x_d);
     DEFINE_FX2TYPE(feq_d);
     DEFINE_FX2TYPE(flt_d);
     DEFINE_FX2TYPE(fle_d);
+
+    if (xlen_eq(64)) {
+      DEFINE_XFTYPE(fcvt_d_l);
+      DEFINE_XFTYPE(fcvt_d_lu);
+      DEFINE_FXTYPE(fcvt_l_d);
+      DEFINE_FXTYPE(fcvt_lu_d);
+    }
   }
 
-  if (isa->extension_enabled(EXT_ZFA)) {
+  if (ext_enabled(EXT_ZFA)) {
     DEFINE_FLITYPE(fli_s);
     DEFINE_FRTYPE(fminm_s);
     DEFINE_FRTYPE(fmaxm_s);
@@ -1257,7 +1440,7 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DEFINE_FX2TYPE(fleq_s);
     DEFINE_FX2TYPE(fltq_s);
 
-    if (isa->extension_enabled(EXT_ZFH) || isa->extension_enabled(EXT_ZVFH)) {
+    if (ext_enabled(EXT_ZFH) || ext_enabled(EXT_ZVFH)) {
       DEFINE_FLITYPE(fli_h);
       DEFINE_FRTYPE(fminm_h);
       DEFINE_FRTYPE(fmaxm_h);
@@ -1267,7 +1450,7 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
       DEFINE_FX2TYPE(fltq_h);
     }
 
-    if (isa->extension_enabled('D')) {
+    if (ext_enabled('D')) {
       DEFINE_FLITYPE(fli_d);
       DEFINE_FRTYPE(fminm_d);
       DEFINE_FRTYPE(fmaxm_d);
@@ -1275,14 +1458,15 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
       DEFINE_FR1TYPE(froundnx_d);
       DEFINE_FX2TYPE(fleq_d);
       DEFINE_FX2TYPE(fltq_d);
+      DEFINE_FXRTYPE(fcvtmod_w_d);
 
-      if (isa->get_max_xlen() == 32) {
+      if (xlen_eq(32)) {
         DEFINE_XF2TYPE(fmvp_d_x);
         DEFINE_FXTYPE(fmvh_x_d);
       }
     }
 
-    if (isa->extension_enabled('Q')) {
+    if (ext_enabled('Q')) {
       DEFINE_FLITYPE(fli_q);
       DEFINE_FRTYPE(fminm_q);
       DEFINE_FRTYPE(fmaxm_q);
@@ -1291,46 +1475,14 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
       DEFINE_FX2TYPE(fleq_q);
       DEFINE_FX2TYPE(fltq_q);
 
-      if (isa->get_max_xlen() == 64) {
+      if (xlen_eq(64)) {
         DEFINE_XF2TYPE(fmvp_q_x);
         DEFINE_FXTYPE(fmvh_x_q);
       }
     }
   }
 
-  if (isa->extension_enabled(EXT_ZDINX)) {
-    DEFINE_RTYPE(fadd_d);
-    DEFINE_RTYPE(fsub_d);
-    DEFINE_RTYPE(fmul_d);
-    DEFINE_RTYPE(fdiv_d);
-    DEFINE_R1TYPE(fsqrt_d);
-    DEFINE_RTYPE(fmin_d);
-    DEFINE_RTYPE(fmax_d);
-    DEFINE_R3TYPE(fmadd_d);
-    DEFINE_R3TYPE(fmsub_d);
-    DEFINE_R3TYPE(fnmadd_d);
-    DEFINE_R3TYPE(fnmsub_d);
-    DEFINE_RTYPE(fsgnj_d);
-    DEFINE_RTYPE(fsgnjn_d);
-    DEFINE_RTYPE(fsgnjx_d);
-    DEFINE_R1TYPE(fcvt_d_s);
-    //DEFINE_R1TYPE(fcvt_d_q);
-    DEFINE_R1TYPE(fcvt_d_l);
-    DEFINE_R1TYPE(fcvt_d_lu);
-    DEFINE_R1TYPE(fcvt_d_w);
-    DEFINE_R1TYPE(fcvt_d_wu);
-    DEFINE_R1TYPE(fcvt_d_wu);
-    DEFINE_R1TYPE(fcvt_l_d);
-    DEFINE_R1TYPE(fcvt_lu_d);
-    DEFINE_R1TYPE(fcvt_w_d);
-    DEFINE_R1TYPE(fcvt_wu_d);
-    DEFINE_R1TYPE(fclass_d);
-    DEFINE_RTYPE(feq_d);
-    DEFINE_RTYPE(flt_d);
-    DEFINE_RTYPE(fle_d);
-  }
-
-  if (isa->extension_enabled(EXT_ZFH)) { 
+  if (ext_enabled(EXT_ZFH)) {
     DEFINE_FRTYPE(fadd_h);
     DEFINE_FRTYPE(fsub_h);
     DEFINE_FRTYPE(fmul_h);
@@ -1360,7 +1512,7 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DEFINE_FX2TYPE(fle_h);
   }
 
-  if (isa->extension_enabled(EXT_ZHINX)) {
+  if (ext_enabled(EXT_ZHINX)) {
     DEFINE_RTYPE(fadd_h);
     DEFINE_RTYPE(fsub_h);
     DEFINE_RTYPE(fmul_h);
@@ -1390,7 +1542,7 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DEFINE_RTYPE(fle_h);
   }
 
-  if (isa->extension_enabled(EXT_ZFHMIN)) {
+  if (ext_enabled(EXT_ZFHMIN)) {
     DEFINE_FR1TYPE(fcvt_h_s);
     DEFINE_FR1TYPE(fcvt_h_d);
     DEFINE_FR1TYPE(fcvt_h_q);
@@ -1399,14 +1551,14 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DEFINE_FR1TYPE(fcvt_q_h);
   }
 
-  if (isa->extension_enabled(EXT_INTERNAL_ZFH_MOVE)) {
+  if (ext_enabled(EXT_INTERNAL_ZFH_MOVE)) {
     DEFINE_FLOAD(flh)
     DEFINE_FSTORE(fsh)
     DEFINE_XFTYPE(fmv_h_x);
     DEFINE_FXTYPE(fmv_x_h);
   }
 
-  if (isa->extension_enabled(EXT_ZHINXMIN)) {
+  if (ext_enabled(EXT_ZHINXMIN)) {
     DEFINE_R1TYPE(fcvt_h_s);
     DEFINE_R1TYPE(fcvt_h_d);
     //DEFINE_R1TYPE(fcvt_h_q);
@@ -1415,7 +1567,12 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     //DEFINE_R1TYPE(fcvt_q_h);
   }
 
-  if (isa->extension_enabled('Q')) {
+  if (ext_enabled(EXT_ZIBI)) {
+     DEFINE_BIMMTYPE(beqi)
+     DEFINE_BIMMTYPE(bnei)
+  }
+
+  if (ext_enabled('Q')) {
     DEFINE_FLOAD(flq)
     DEFINE_FSTORE(fsq)
     DEFINE_FRTYPE(fadd_q);
@@ -1449,13 +1606,13 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DEFINE_FX2TYPE(fle_q);
   }
 
-  if (isa->extension_enabled(EXT_ZFBFMIN)) {
+  if (ext_enabled(EXT_ZFBFMIN)) {
     DEFINE_FR1TYPE(fcvt_bf16_s);
     DEFINE_FR1TYPE(fcvt_s_bf16);
   }
 
   // ext-h
-  if (isa->extension_enabled('H')) {
+  if (ext_enabled('H')) {
     DEFINE_XLOAD_BASE(hlv_b)
     DEFINE_XLOAD_BASE(hlv_bu)
     DEFINE_XLOAD_BASE(hlv_h)
@@ -1477,9 +1634,9 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
   }
 
   // ext-c
-  if (isa->extension_enabled(EXT_ZCA)) {
+  if (ext_enabled(EXT_ZCA)) {
     DISASM_INSN("c.ebreak", c_add, mask_rd | mask_rvc_rs2, {});
-    add_insn(new disasm_insn_t("ret", match_c_jr | match_rd_ra, mask_c_jr | mask_rd | mask_rvc_imm, {}));
+    add_insn(new disasm_insn_t("c.ret", match_c_jr | match_rd_ra, mask_c_jr | mask_rd | mask_rvc_imm, {}));
     DISASM_INSN("c.jr", c_jr, mask_rvc_imm, {&rvc_rs1});
     DISASM_INSN("c.jalr", c_jalr, mask_rvc_imm, {&rvc_rs1});
     DISASM_INSN("c.nop", c_addi, mask_rd | mask_rvc_imm, {});
@@ -1488,15 +1645,15 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DISASM_INSN("c.li", c_li, 0, {&xrd, &rvc_imm});
     DISASM_INSN("c.lui", c_lui, 0, {&xrd, &rvc_uimm});
     DISASM_INSN("c.addi", c_addi, 0, {&xrd, &rvc_imm});
-    DISASM_INSN("c.slli", c_slli, 0, {&rvc_rs1, &rvc_shamt});
-    DISASM_INSN("c.srli", c_srli, 0, {&rvc_rs1s, &rvc_shamt});
-    DISASM_INSN("c.srai", c_srai, 0, {&rvc_rs1s, &rvc_shamt});
+    // On RV32 the shift amount is 5 bits, so bit 12 is reserved.
+    const uint32_t rvc_shamt_msb = xlen_eq(64) ? 0 : mask_rvc_shamt_msb;
+    DISASM_INSN("c.slli", c_slli, rvc_shamt_msb, {&rvc_rs1, &rvc_shamt});
+    DISASM_INSN("c.srli", c_srli, rvc_shamt_msb, {&rvc_rs1s, &rvc_shamt});
+    DISASM_INSN("c.srai", c_srai, rvc_shamt_msb, {&rvc_rs1s, &rvc_shamt});
     DISASM_INSN("c.andi", c_andi, 0, {&rvc_rs1s, &rvc_imm});
     DISASM_INSN("c.mv", c_mv, 0, {&xrd, &rvc_rs2});
     DISASM_INSN("c.add", c_add, 0, {&xrd, &rvc_rs2});
-    DISASM_INSN("c.addw", c_addw, 0, {&rvc_rs1s, &rvc_rs2s});
     DISASM_INSN("c.sub", c_sub, 0, {&rvc_rs1s, &rvc_rs2s});
-    DISASM_INSN("c.subw", c_subw, 0, {&rvc_rs1s, &rvc_rs2s});
     DISASM_INSN("c.and", c_and, 0, {&rvc_rs1s, &rvc_rs2s});
     DISASM_INSN("c.or", c_or, 0, {&rvc_rs1s, &rvc_rs2s});
     DISASM_INSN("c.xor", c_xor, 0, {&rvc_rs1s, &rvc_rs2s});
@@ -1507,13 +1664,18 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DISASM_INSN("c.beqz", c_beqz, 0, {&rvc_rs1s, &rvc_branch_target});
     DISASM_INSN("c.bnez", c_bnez, 0, {&rvc_rs1s, &rvc_branch_target});
     DISASM_INSN("c.j", c_j, 0, {&rvc_jump_target});
-    if (isa->get_max_xlen() == 32) {
+    if (xlen_eq_strict(32)) {
       DISASM_INSN("c.jal", c_jal, 0, {&rvc_jump_target});
     } else {
       DISASM_INSN("c.addiw", c_addiw, 0, {&xrd, &rvc_imm});
     }
 
-    if (isa->get_max_xlen() == 64 || isa->extension_enabled(EXT_ZCLSD)) {
+    if (xlen_eq(64)) {
+      DISASM_INSN("c.addw", c_addw, 0, {&rvc_rs1s, &rvc_rs2s});
+      DISASM_INSN("c.subw", c_subw, 0, {&rvc_rs1s, &rvc_rs2s});
+    }
+
+    if (xlen_eq_strict(64) || ext_enabled_strict(EXT_ZCLSD)) {
       DISASM_INSN("c.ld", c_ld, 0, {&rvc_rs2s, &rvc_ld_address});
       DISASM_INSN("c.ldsp", c_ldsp, 0, {&xrd, &rvc_ldsp_address});
       DISASM_INSN("c.sd", c_sd, 0, {&rvc_rs2s, &rvc_ld_address});
@@ -1521,26 +1683,26 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     }
   }
 
-  if (isa->extension_enabled(EXT_ZCD) && isa->extension_enabled('D')) {
+  if (ext_enabled(EXT_ZCD)) {
     DISASM_INSN("c.fld", c_fld, 0, {&rvc_fp_rs2s, &rvc_ld_address});
     DISASM_INSN("c.fldsp", c_fldsp, 0, {&frd, &rvc_ldsp_address});
     DISASM_INSN("c.fsd", c_fsd, 0, {&rvc_fp_rs2s, &rvc_ld_address});
     DISASM_INSN("c.fsdsp", c_fsdsp, 0, {&rvc_fp_rs2, &rvc_sdsp_address});
   }
 
-  if (isa->extension_enabled(EXT_ZCF) && isa->extension_enabled('F')) {
+  if (ext_enabled(EXT_ZCF)) {
     DISASM_INSN("c.flw", c_flw, 0, {&rvc_fp_rs2s, &rvc_lw_address});
     DISASM_INSN("c.flwsp", c_flwsp, 0, {&frd, &rvc_lwsp_address});
     DISASM_INSN("c.fsw", c_fsw, 0, {&rvc_fp_rs2s, &rvc_lw_address});
     DISASM_INSN("c.fswsp", c_fswsp, 0, {&rvc_fp_rs2, &rvc_swsp_address});
   }
 
-  if (isa->extension_enabled(EXT_ZCB)) {
+  if (ext_enabled(EXT_ZCB)) {
     DISASM_INSN("c.zext.b", c_zext_b, 0, {&rvc_rs1s});
     DISASM_INSN("c.sext.b", c_sext_b, 0, {&rvc_rs1s});
     DISASM_INSN("c.zext.h", c_zext_h, 0, {&rvc_rs1s});
     DISASM_INSN("c.sext.h", c_sext_h, 0, {&rvc_rs1s});
-    if (isa->get_max_xlen() == 64) {
+    if (xlen_eq(64)) {
       DISASM_INSN("c.zext.w", c_zext_w, 0, {&rvc_rs1s});
     }
     DISASM_INSN("c.not", c_not, 0, {&rvc_rs1s});
@@ -1552,8 +1714,8 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DISASM_INSN("c.sh", c_sh, 0, {&rvc_rs2s, &rvb_h_address});
   }
 
-  if (isa->extension_enabled(EXT_ZCMP)) {
-    if (isa->get_max_xlen() == 32) {
+  if (ext_enabled(EXT_ZCMP)) {
+    if (xlen_eq_strict(32)) {
       DISASM_INSN("cm.push", cm_push, 0, {&rvcm_pushpop_rlist, &rvcm_push_stack_adj_32});
       DISASM_INSN("cm.pop", cm_pop, 0, {&rvcm_pushpop_rlist, &rvcm_pop_stack_adj_32});
       DISASM_INSN("cm.popret", cm_popret, 0, {&rvcm_pushpop_rlist, &rvcm_pop_stack_adj_32});
@@ -1569,12 +1731,12 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DISASM_INSN("cm.mvsa01", cm_mvsa01, 0, {&rvc_r1s, &rvc_r2s});
   }
 
-  if (isa->extension_enabled(EXT_ZCMT)) {
+  if (ext_enabled(EXT_ZCMT)) {
     DISASM_INSN("cm.jt", cm_jalt, 0x380, {&rvcm_jt_index});
     DISASM_INSN("cm.jalt", cm_jalt, 0, {&rvcm_jt_index});
   }
 
-  if (isa->has_any_vector()) {
+  if (isa->has_any_vector() || !strict) {
     DISASM_INSN("vsetivli", vsetivli, 0, {&xrd, &zimm5, &v_vtype});
     DISASM_INSN("vsetvli", vsetvli, 0, {&xrd, &xrs1, &v_vtype});
     DEFINE_RTYPE(vsetvl);
@@ -1665,6 +1827,7 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     #define DEFINE_VECTOR_MULTIPLYADD_VF(code) add_vector_multiplyadd_vf_insn(this, #code, match_##code, mask_##code)
     #define DEFINE_VECTOR_VI(code) add_vector_vi_insn(this, #code, match_##code, mask_##code)
     #define DEFINE_VECTOR_VIU(code) add_vector_viu_insn(this, #code, match_##code, mask_##code)
+    #define DEFINE_VECTOR_BDOTA(code) add_vector_bdota_insn(this, #code, match_##code, mask_##code)
 
     #define DISASM_OPIV_VXI_INSN(name, sign, suf) \
       DEFINE_VECTOR_VV(name##_##suf##v); \
@@ -1868,6 +2031,45 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DISASM_OPIV_MULTIPLYADD__X__INSN(vwmaccus,  1);
     DISASM_OPIV_MULTIPLYADD_VX__INSN(vwmaccsu,  0);
 
+    if (ext_enabled(EXT_ZVDOT4A)) {
+      DISASM_OPIV_VX__INSN(vdot4a,   0);
+      DISASM_OPIV_VX__INSN(vdot4au,  0);
+      DISASM_OPIV_VX__INSN(vdot4asu, 0);
+      DISASM_OPIV__X__INSN(vdot4aus, 0);
+    }
+
+    if (ext_enabled(EXT_ZVQWBDOTA8I) || ext_enabled(EXT_ZVQWBDOTA16I)) {
+      DEFINE_VECTOR_BDOTA(vqwbdotau_vv);
+      DEFINE_VECTOR_BDOTA(vqwbdotas_vv);
+    }
+
+    if (ext_enabled(EXT_ZVFQWBDOTA8F)) {
+      DEFINE_VECTOR_BDOTA(vfqwbdota_vv);
+      DEFINE_VECTOR_BDOTA(vfqwbdota_alt_vv);
+    }
+
+    if (ext_enabled(EXT_ZVFWBDOTA16BF)) {
+      DEFINE_VECTOR_BDOTA(vfwbdota_vv);
+    }
+
+    if (ext_enabled(EXT_ZVFBDOTA32F)) {
+      DEFINE_VECTOR_BDOTA(vfbdota_vv);
+    }
+
+    if (ext_enabled(EXT_ZVQWDOTA8I) || ext_enabled(EXT_ZVQWDOTA16I)) {
+      DEFINE_VECTOR_VV(vqwdotau_vv);
+      DEFINE_VECTOR_VV(vqwdotas_vv);
+    }
+
+    if (ext_enabled(EXT_ZVFQWDOTA8F)) {
+      DEFINE_VECTOR_VV(vfqwdota_vv);
+      DEFINE_VECTOR_VV(vfqwdota_alt_vv);
+    }
+
+    if (ext_enabled(EXT_ZVFWDOTA16BF)) {
+      DEFINE_VECTOR_VV(vfwdota_vv);
+    }
+
     #undef DISASM_OPIV_VXI_INSN
     #undef DISASM_OPIV_VX__INSN
     #undef DISASM_OPIV__XI_INSN
@@ -1983,40 +2185,52 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     #undef DISASM_VFUNARY0_INSN
   }
 
-  if (isa->extension_enabled(EXT_ZVFBFMIN)) {
+  if (ext_enabled(EXT_ZVFOFP4MIN)) {
+    DEFINE_VECTOR_V(vfext_vf2);
+  }
+
+  if (ext_enabled(EXT_ZVFOFP8MIN)) {
+    DEFINE_VECTOR_V(vfncvt_f_f_q);
+    DEFINE_VECTOR_V(vfncvt_sat_f_f_q);
+    DEFINE_VECTOR_V(vfncvtbf16_sat_f_f_w);
+  }
+
+  if (ext_enabled(EXT_ZVFBFMIN)) {
     DEFINE_VECTOR_V(vfncvtbf16_f_f_w);
     DEFINE_VECTOR_V(vfwcvtbf16_f_f_v);
   }
 
-  if (isa->extension_enabled(EXT_ZVFBFWMA)) {
+  if (ext_enabled(EXT_ZVFBFWMA)) {
     DEFINE_VECTOR_VV(vfwmaccbf16_vv);
     DEFINE_VECTOR_VF(vfwmaccbf16_vf);
   }
-  
-  if (isa->extension_enabled(EXT_ZMMUL)) {
+
+  if (ext_enabled(EXT_ZMMUL)) {
     DEFINE_RTYPE(mul);
     DEFINE_RTYPE(mulh);
     DEFINE_RTYPE(mulhu);
     DEFINE_RTYPE(mulhsu);
-    DEFINE_RTYPE(mulw);
+
+    if (xlen_eq(64))
+      DEFINE_RTYPE(mulw);
   }
 
-  if (isa->extension_enabled(EXT_ZICBOM)) {
+  if (ext_enabled(EXT_ZICBOM)) {
     DISASM_INSN("cbo.clean", cbo_clean, 0, {&base_only_address});
     DISASM_INSN("cbo.flush", cbo_flush, 0, {&base_only_address});
     DISASM_INSN("cbo.inval", cbo_inval, 0, {&base_only_address});
   }
 
-  if (isa->extension_enabled(EXT_ZICBOZ)) {
+  if (ext_enabled(EXT_ZICBOZ)) {
     DISASM_INSN("cbo.zero", cbo_zero, 0, {&base_only_address});
   }
 
-  if (isa->extension_enabled(EXT_ZICOND)) {
+  if (ext_enabled(EXT_ZICOND)) {
     DEFINE_RTYPE(czero_eqz);
     DEFINE_RTYPE(czero_nez);
   }
 
-  if (isa->extension_enabled(EXT_ZIMOP)) {
+  if (ext_enabled(EXT_ZIMOP)) {
     #define DISASM_MOP_R(name, rs1, rd) \
       add_insn(new disasm_insn_t(#name, match_##name | (rs1 << 15) | (rd << 7), \
                                         0xFFFFFFFF, {&xrd, &xrs1}));
@@ -2052,7 +2266,7 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DEFINE_R1TYPE(mop_r_25);
     DEFINE_R1TYPE(mop_r_26);
     DEFINE_R1TYPE(mop_r_27);
-    if (!isa->extension_enabled(EXT_ZICFISS)) {
+    if (!ext_enabled_strict(EXT_ZICFISS)) {
       DEFINE_R1TYPE(mop_r_28);
     } else {
       // Add code points of mop_r_28 not used by Zicfiss
@@ -2071,8 +2285,7 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DEFINE_RTYPE(mop_rr_4);
     DEFINE_RTYPE(mop_rr_5);
     DEFINE_RTYPE(mop_rr_6);
-    DEFINE_RTYPE(mop_rr_7);
-    if (!isa->extension_enabled(EXT_ZICFISS)) {
+    if (!ext_enabled_strict(EXT_ZICFISS)) {
       DEFINE_RTYPE(mop_rr_7);
     } else {
       // Add code points of mop_rr_7 not used by Zicfiss
@@ -2084,11 +2297,11 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     }
   }
 
-  if (isa->extension_enabled(EXT_ZCMOP)) {
-    if (!isa->extension_enabled(EXT_ZICFISS))
+  if (ext_enabled(EXT_ZCMOP)) {
+    if (!ext_enabled_strict(EXT_ZICFISS))
       DISASM_INSN("c.mop.1", c_mop_1, 0, {});
     DISASM_INSN("c.mop.3", c_mop_3, 0, {});
-    if (!isa->extension_enabled(EXT_ZICFISS))
+    if (!ext_enabled_strict(EXT_ZICFISS))
       DISASM_INSN("c.mop.5", c_mop_5, 0, {});
     DISASM_INSN("c.mop.7", c_mop_7, 0, {});
     DISASM_INSN("c.mop.9", c_mop_9, 0, {});
@@ -2097,44 +2310,50 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DISASM_INSN("c.mop.15", c_mop_15, 0, {});
   }
 
-  if (isa->extension_enabled(EXT_ZKND) ||
-      isa->extension_enabled(EXT_ZKNE)) {
+  if (ext_enabled(EXT_ZKND) || ext_enabled(EXT_ZKNE)) {
     DISASM_INSN("aes64ks1i", aes64ks1i, 0, {&xrd, &xrs1, &rcon});
     DEFINE_RTYPE(aes64ks2);
   }
 
-  if (isa->extension_enabled(EXT_ZKND)) {
-    if(isa->get_max_xlen() == 64) {
+  if (ext_enabled(EXT_ZKND)) {
+    if (xlen_eq(64)) {
       DEFINE_RTYPE(aes64ds);
       DEFINE_RTYPE(aes64dsm);
       DEFINE_R1TYPE(aes64im);
-    } else if (isa->get_max_xlen() == 32) {
+    }
+
+    if (xlen_eq(32)) {
       DISASM_INSN("aes32dsi", aes32dsi, 0, {&xrd, &xrs1, &xrs2, &bs});
       DISASM_INSN("aes32dsmi", aes32dsmi, 0, {&xrd, &xrs1, &xrs2, &bs});
     }
   }
 
-  if (isa->extension_enabled(EXT_ZKNE)) {
-    if(isa->get_max_xlen() == 64) {
+  if (ext_enabled(EXT_ZKNE)) {
+    if (xlen_eq(64)) {
       DEFINE_RTYPE(aes64es);
       DEFINE_RTYPE(aes64esm);
-    } else if (isa->get_max_xlen() == 32) {
+    }
+
+    if (xlen_eq(32)) {
       DISASM_INSN("aes32esi", aes32esi, 0, {&xrd, &xrs1, &xrs2, &bs});
       DISASM_INSN("aes32esmi", aes32esmi, 0, {&xrd, &xrs1, &xrs2, &bs});
     }
   }
 
-  if (isa->extension_enabled(EXT_ZKNH)) {
+  if (ext_enabled(EXT_ZKNH)) {
     DEFINE_R1TYPE(sha256sig0);
     DEFINE_R1TYPE(sha256sig1);
     DEFINE_R1TYPE(sha256sum0);
     DEFINE_R1TYPE(sha256sum1);
-    if(isa->get_max_xlen() == 64) {
+
+    if (xlen_eq(64)) {
       DEFINE_R1TYPE(sha512sig0);
       DEFINE_R1TYPE(sha512sig1);
       DEFINE_R1TYPE(sha512sum0);
       DEFINE_R1TYPE(sha512sum1);
-    } else if (isa->get_max_xlen() == 32) {
+    }
+
+    if (xlen_eq(32)) {
       DEFINE_RTYPE(sha512sig0h);
       DEFINE_RTYPE(sha512sig0l);
       DEFINE_RTYPE(sha512sig1h);
@@ -2144,17 +2363,36 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     }
   }
 
-  if (isa->extension_enabled(EXT_ZKSED)) {
+  if (ext_enabled(EXT_ZKSED)) {
     DISASM_INSN("sm4ed", sm4ed, 0, {&xrd, &xrs1, &xrs2, &bs});
     DISASM_INSN("sm4ks", sm4ks, 0, {&xrd, &xrs1, &xrs2, &bs});
   }
 
-  if (isa->extension_enabled(EXT_ZKSH)) {
+  if (ext_enabled(EXT_ZKSH)) {
     DEFINE_R1TYPE(sm3p0);
     DEFINE_R1TYPE(sm3p1);
   }
 
-  if (isa->extension_enabled(EXT_ZVBB)) {
+  if (ext_enabled(EXT_ZVABD)) {
+    DEFINE_VECTOR_VV(vabd_vv);
+    DEFINE_VECTOR_VX(vabd_vx);
+    DEFINE_VECTOR_VV(vabdu_vv);
+    DEFINE_VECTOR_VX(vabdu_vx);
+    DEFINE_VECTOR_VV(vwabda_vv);
+    DEFINE_VECTOR_VX(vwabda_vx);
+    DEFINE_VECTOR_VV(vwabdau_vv);
+    DEFINE_VECTOR_VX(vwabdau_vx);
+  }
+
+  if (ext_enabled(EXT_ZVZIP)) {
+    DEFINE_VECTOR_VV(vzip_vv);
+    DEFINE_VECTOR_V(vunzipe_v);
+    DEFINE_VECTOR_V(vunzipo_v);
+    DEFINE_VECTOR_VV(vpaire_vv);
+    DEFINE_VECTOR_VV(vpairo_vv);
+  }
+
+  if (ext_enabled(EXT_ZVBB)) {
 #define DEFINE_VECTOR_VIU_ZIMM6(code) \
   add_vector_viu_z6_insn(this, #code, match_##code, mask_##code)
 #define DISASM_VECTOR_VV_VX(name) \
@@ -2186,7 +2424,7 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
 #undef DISASM_VECTOR_VV_VX_VIU_ZIMM6
     }
 
-  if (isa->extension_enabled(EXT_ZVBC)) {
+  if (ext_enabled(EXT_ZVBC)) {
 #define DISASM_VECTOR_VV_VX(name) \
     DEFINE_VECTOR_VV(name##_vv); \
     DEFINE_VECTOR_VX(name##_vx)
@@ -2197,14 +2435,14 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
 #undef DISASM_VECTOR_VV_VX
   }
 
-  if (isa->extension_enabled(EXT_ZVKG)) {
+  if (ext_enabled(EXT_ZVKG)) {
     // Despite its suffix, the vgmul.vv instruction
     // is really ".v", with the form "vgmul.vv vd, vs2".
     DEFINE_VECTOR_V(vgmul_vv);
     DEFINE_VECTOR_VV(vghsh_vv);
   }
 
-  if (isa->extension_enabled(EXT_ZVKNED)) {
+  if (ext_enabled(EXT_ZVKNED)) {
     // Despite their suffixes, the vaes*.{vv,vs} instructions
     // are really ".v", with the form "<op>.{vv,vs} vd, vs2".
 #define DISASM_VECTOR_VV_VS(name) \
@@ -2222,14 +2460,13 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
 #undef DISASM_VECTOR_VV_VS
   }
 
-  if (isa->extension_enabled(EXT_ZVKNHA) ||
-      isa->extension_enabled(EXT_ZVKNHB)) {
+  if (ext_enabled(EXT_ZVKNHA) || ext_enabled(EXT_ZVKNHB)) {
     DEFINE_VECTOR_VV(vsha2ms_vv);
     DEFINE_VECTOR_VV(vsha2ch_vv);
     DEFINE_VECTOR_VV(vsha2cl_vv);
   }
 
-  if (isa->extension_enabled(EXT_ZVKSED)) {
+  if (ext_enabled(EXT_ZVKSED)) {
     DEFINE_VECTOR_VIU(vsm4k_vi);
     // Despite their suffixes, the vsm4r.{vv,vs} instructions
     // are really ".v", with the form "vsm4r.{vv,vs} vd, vs2".
@@ -2237,12 +2474,12 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DEFINE_VECTOR_V(vsm4r_vs);
   }
 
-  if (isa->extension_enabled(EXT_ZVKSH)) {
+  if (ext_enabled(EXT_ZVKSH)) {
     DEFINE_VECTOR_VIU(vsm3c_vi);
     DEFINE_VECTOR_VV(vsm3me_vv);
   }
 
-  if (isa->extension_enabled(EXT_ZALASR)) {
+  if (ext_enabled(EXT_ZALASR)) {
     DEFINE_XLOAD_BASE(lb_aq);
     DEFINE_XLOAD_BASE(lh_aq);
     DEFINE_XLOAD_BASE(lw_aq);
@@ -2253,7 +2490,7 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DEFINE_XSTORE_BASE(sd_rl);
   }
 
-  if(isa->extension_enabled(EXT_ZICFISS)) {
+  if (ext_enabled(EXT_ZICFISS)) {
     DISASM_INSN("sspush", sspush_x1, 0, {&xrs2});
     DISASM_INSN("sspush", sspush_x5, 0, {&xrs2});
     DISASM_INSN("sspopchk", sspopchk_x1, 0, {&xrs1});
@@ -2261,30 +2498,711 @@ void disassembler_t::add_instructions(const isa_parser_t* isa)
     DISASM_INSN("ssrdp", ssrdp, 0, {&xrd});
     DEFINE_XAMO(ssamoswap_w);
 
-    if(isa->get_max_xlen() == 64)
+    if (xlen_eq(64))
       DEFINE_XAMO(ssamoswap_d)
 
-    if (isa->extension_enabled(EXT_ZCA)) {
+    if (ext_enabled(EXT_ZCA)) {
       DISASM_INSN("c.sspush", c_sspush_x1, 0, {&rvc_ra});
       DISASM_INSN("c.sspopchk", c_sspopchk_x5, 0, {&rvc_t0});
     }
   }
+
+  // P-extension (Packed SIMD) instructions
+  if (ext_enabled('P')) {
+    // R-type instructions (rd, rs1, rs2) - RV32 only (share opcode with RV64 packed-word)
+    if (xlen_eq(32)) {
+      DEFINE_RTYPE(aadd);
+      DEFINE_RTYPE(aaddu);
+      DEFINE_RTYPE(asub);
+      DEFINE_RTYPE(asubu);
+      DEFINE_RTYPE(mseq);
+      DEFINE_RTYPE(mslt);
+      DEFINE_RTYPE(msltu);
+    }
+    // RV32/RV64 common instructions
+    DEFINE_RTYPE_PAIR(addd);
+    DEFINE_RTYPE_PAIR(subd);
+    DEFINE_RTYPE(merge);
+    DEFINE_RTYPE(mvm);
+    DEFINE_RTYPE(mvmn);
+    // Type 2: rs1p - Narrowing instructions (rd normal, rs1p is pair, rs2 normal/scalar)
+    DEFINE_RTYPE_RS1P(nclip);
+    DEFINE_RTYPE_RS1P(nclipr);
+    DEFINE_RTYPE_RS1P(nclipu);
+    DEFINE_RTYPE_RS1P(nclipru);
+    DEFINE_RTYPE_RS1P(nsra);
+    DEFINE_RTYPE_RS1P(nsrar);
+    DEFINE_RTYPE_RS1P(nsrl);
+    // RV32-only instructions (share opcode with RV64 packed-word)
+    if (xlen_eq(32)) {
+      DEFINE_RTYPE(sadd);
+      DEFINE_RTYPE(saddu);
+      DEFINE_RTYPE(ssub);
+      DEFINE_RTYPE(ssubu);
+      DEFINE_RTYPE(ssh1sadd);
+      DEFINE_RTYPE(ssha);
+      DEFINE_RTYPE(sshar);
+      DEFINE_RTYPE(sshl);
+      DEFINE_RTYPE(sshlr);
+    }
+    DEFINE_RTYPE_PAIR(sha);
+    DEFINE_RTYPE_PAIR(shar);
+    DEFINE_RTYPE(slx);
+    DEFINE_RTYPE(srx);
+    // Type 1: rdp - Widening instructions (rdp is pair, rs1/rs2 normal)
+    DEFINE_RTYPE_RDP(wadd);
+    DEFINE_RTYPE_RDP(wadda);
+    DEFINE_RTYPE_RDP(waddu);
+    DEFINE_RTYPE_RDP(waddau);
+    DEFINE_RTYPE_RDP(wsub);
+    DEFINE_RTYPE_RDP(wsuba);
+    DEFINE_RTYPE_RDP(wsubu);
+    DEFINE_RTYPE_RDP(wsubau);
+    DEFINE_RTYPE_RDP(wsll);
+    DEFINE_RTYPE_RDP(wsla);
+    DEFINE_RTYPE_RDP(wmul);
+    DEFINE_RTYPE_RDP(wmulu);
+    DEFINE_RTYPE_RDP(wmulsu);
+    DEFINE_RTYPE_RDP(wmacc);
+    DEFINE_RTYPE_RDP(wmaccu);
+    DEFINE_RTYPE_RDP(wmaccsu);
+
+    // R-type mac/mul instructions with element selection (RV32 only - share opcode with RV64 packed-word)
+    if (xlen_eq(32)) {
+      DEFINE_RTYPE(macc_h00);
+      DEFINE_RTYPE(macc_h01);
+      DEFINE_RTYPE(macc_h11);
+      DEFINE_RTYPE(maccu_h00);
+      DEFINE_RTYPE(maccu_h01);
+      DEFINE_RTYPE(maccu_h11);
+      DEFINE_RTYPE(maccsu_h00);
+      DEFINE_RTYPE(maccsu_h11);
+      DEFINE_RTYPE(mul_h00);
+      DEFINE_RTYPE(mul_h01);
+      DEFINE_RTYPE(mul_h11);
+      DEFINE_RTYPE(mulu_h00);
+      DEFINE_RTYPE(mulu_h01);
+      DEFINE_RTYPE(mulu_h11);
+      DEFINE_RTYPE(mulsu_h00);
+      DEFINE_RTYPE(mulsu_h11);
+      DEFINE_RTYPE(mulh_h0);
+      DEFINE_RTYPE(mulh_h1);
+      DEFINE_RTYPE(mulhsu_h0);
+      DEFINE_RTYPE(mulhsu_h1);
+      DEFINE_RTYPE(mulhr);
+      DEFINE_RTYPE(mulhru);
+      DEFINE_RTYPE(mulhrsu);
+      DEFINE_RTYPE(mulq);
+      DEFINE_RTYPE(mulqr);
+      DEFINE_RTYPE(mhacc);
+      DEFINE_RTYPE(mhaccu);
+      DEFINE_RTYPE(mhaccsu);
+      DEFINE_RTYPE(mhacc_h0);
+      DEFINE_RTYPE(mhacc_h1);
+      DEFINE_RTYPE(mhaccsu_h0);
+      DEFINE_RTYPE(mhaccsu_h1);
+      DEFINE_RTYPE(mhracc);
+      DEFINE_RTYPE(mhraccu);
+      DEFINE_RTYPE(mhraccsu);
+    }
+    DEFINE_RTYPE(mqacc_h00);
+    DEFINE_RTYPE(mqacc_h01);
+    DEFINE_RTYPE(mqacc_h11);
+    DEFINE_RTYPE(mqracc_h00);
+    DEFINE_RTYPE(mqracc_h01);
+    DEFINE_RTYPE(mqracc_h11);
+
+    // R1-type instructions (rd, rs1) - unary ops
+    DEFINE_R1TYPE(abs);
+    DEFINE_R1TYPE(cls);
+
+    // I-type shift instructions (rd, rs1, shamt)
+    DISASM_INSN("nclipi", nclipi, 0, {&xrd, &xrs1, &shamtd});
+    DISASM_INSN("nclipiu", nclipiu, 0, {&xrd, &xrs1, &shamtd});
+    DISASM_INSN("nclipri", nclipri, 0, {&xrd, &xrs1, &shamtd});
+    DISASM_INSN("nclipriu", nclipriu, 0, {&xrd, &xrs1, &shamtd});
+    DISASM_INSN("nsrai", nsrai, 0, {&xrd, &xrs1, &shamtd});
+    DISASM_INSN("nsrari", nsrari, 0, {&xrd, &xrs1, &shamtd});
+    DISASM_INSN("nsrli", nsrli, 0, {&xrd, &xrs1, &shamtd});
+    // sslai shares opcode with psslai_w on RV64
+    if (xlen_eq(32)) {
+      DISASM_INSN("sslai", sslai, 0, {&xrd, &xrs1, &shamt});
+    }
+    DISASM_INSN("wslli", wslli, 0, {&xrd, &xrs1, &shamt});
+    DISASM_INSN("wslai", wslai, 0, {&xrd, &xrs1, &shamt});
+    if (xlen_eq(64)) {
+      DISASM_INSN("sati", sati, 0, {&xrd, &xrs1, &shamt});
+      DISASM_INSN("usati", usati, 0, {&xrd, &xrs1, &shamt});
+      DISASM_INSN("srari", srari, 0, {&xrd, &xrs1, &shamt});
+    } else {
+      DISASM_INSN("sati", sati_rv32, 0, {&xrd, &xrs1, &shamt});
+      DISASM_INSN("usati", usati_rv32, 0, {&xrd, &xrs1, &shamt});
+      DISASM_INSN("srari", srari_rv32, 0, {&xrd, &xrs1, &shamt});
+    }
+
+    // Packed R-type instructions (rd, rs1, rs2) - RV32/RV64 common
+    DEFINE_RTYPE(paadd_b);
+    DEFINE_RTYPE(paadd_h);
+    // Type 4: rdp + rs1p + rs2p - Doubleword pair-to-pair ops
+    DEFINE_RTYPE_PAIR(paadd_db);
+    DEFINE_RTYPE_PAIR(paadd_dh);
+    DEFINE_RTYPE_PAIR(paadd_dw);
+    DEFINE_RTYPE(paaddu_b);
+    DEFINE_RTYPE(paaddu_h);
+    DEFINE_RTYPE_PAIR(paaddu_db);
+    DEFINE_RTYPE_PAIR(paaddu_dh);
+    DEFINE_RTYPE_PAIR(paaddu_dw);
+    DEFINE_RTYPE(paas_hx);
+    DEFINE_RTYPE_PAIR(paas_dhx);
+    DEFINE_RTYPE(pabd_b);
+    DEFINE_RTYPE(pabd_h);
+    DEFINE_RTYPE_PAIR(pabd_db);
+    DEFINE_RTYPE_PAIR(pabd_dh);
+    DEFINE_RTYPE(pabdu_b);
+    DEFINE_RTYPE(pabdu_h);
+    DEFINE_RTYPE_PAIR(pabdu_db);
+    DEFINE_RTYPE_PAIR(pabdu_dh);
+    DEFINE_RTYPE(pabdsumu_b);
+    DEFINE_RTYPE(pabdsumau_b);
+    DEFINE_RTYPE(padd_b);
+    DEFINE_RTYPE(padd_h);
+    DEFINE_RTYPE(padd_bs);
+    DEFINE_RTYPE(padd_hs);
+    DEFINE_RTYPE_PAIR(padd_db);
+    DEFINE_RTYPE_PAIR(padd_dh);
+    DEFINE_RTYPE_PAIR(padd_dw);
+    // Type 3: rdp + rs1p - Doubleword with scalar rs2
+    DEFINE_RTYPE_RDP_RS1P(padd_dbs);
+    DEFINE_RTYPE_RDP_RS1P(padd_dhs);
+    DEFINE_RTYPE_RDP_RS1P(padd_dws);
+    DEFINE_RTYPE(pasub_b);
+    DEFINE_RTYPE(pasub_h);
+    DEFINE_RTYPE_PAIR(pasub_db);
+    DEFINE_RTYPE_PAIR(pasub_dh);
+    DEFINE_RTYPE_PAIR(pasub_dw);
+    DEFINE_RTYPE(pasubu_b);
+    DEFINE_RTYPE(pasubu_h);
+    DEFINE_RTYPE_PAIR(pasubu_db);
+    DEFINE_RTYPE_PAIR(pasubu_dh);
+    DEFINE_RTYPE_PAIR(pasubu_dw);
+    DEFINE_RTYPE(pasa_hx);
+    DEFINE_RTYPE_PAIR(pasa_dhx);
+    DEFINE_RTYPE(pas_hx);
+    DEFINE_RTYPE_PAIR(pas_dhx);
+    DEFINE_RTYPE(psadd_b);
+    DEFINE_RTYPE(psadd_h);
+    DEFINE_RTYPE_PAIR(psadd_db);
+    DEFINE_RTYPE_PAIR(psadd_dh);
+    DEFINE_RTYPE_PAIR(psadd_dw);
+    DEFINE_RTYPE(psaddu_b);
+    DEFINE_RTYPE(psaddu_h);
+    DEFINE_RTYPE_PAIR(psaddu_db);
+    DEFINE_RTYPE_PAIR(psaddu_dh);
+    DEFINE_RTYPE_PAIR(psaddu_dw);
+    DEFINE_RTYPE(psub_b);
+    DEFINE_RTYPE(psub_h);
+    DEFINE_RTYPE_PAIR(psub_db);
+    DEFINE_RTYPE_PAIR(psub_dh);
+    DEFINE_RTYPE_PAIR(psub_dw);
+    DEFINE_RTYPE(pssub_b);
+    DEFINE_RTYPE(pssub_h);
+    DEFINE_RTYPE_PAIR(pssub_db);
+    DEFINE_RTYPE_PAIR(pssub_dh);
+    DEFINE_RTYPE_PAIR(pssub_dw);
+    DEFINE_RTYPE(pssubu_b);
+    DEFINE_RTYPE(pssubu_h);
+    DEFINE_RTYPE_PAIR(pssubu_db);
+    DEFINE_RTYPE_PAIR(pssubu_dh);
+    DEFINE_RTYPE_PAIR(pssubu_dw);
+    DEFINE_RTYPE(psa_hx);
+    DEFINE_RTYPE_PAIR(psa_dhx);
+    DEFINE_RTYPE(psas_hx);
+    DEFINE_RTYPE_PAIR(psas_dhx);
+    DEFINE_RTYPE(pssa_hx);
+    DEFINE_RTYPE_PAIR(pssa_dhx);
+    DEFINE_RTYPE(pmax_b);
+    DEFINE_RTYPE(pmax_h);
+    DEFINE_RTYPE_PAIR(pmax_db);
+    DEFINE_RTYPE_PAIR(pmax_dh);
+    DEFINE_RTYPE_PAIR(pmax_dw);
+    DEFINE_RTYPE(pmaxu_b);
+    DEFINE_RTYPE(pmaxu_h);
+    DEFINE_RTYPE_PAIR(pmaxu_db);
+    DEFINE_RTYPE_PAIR(pmaxu_dh);
+    DEFINE_RTYPE_PAIR(pmaxu_dw);
+    DEFINE_RTYPE(pmin_b);
+    DEFINE_RTYPE(pmin_h);
+    DEFINE_RTYPE_PAIR(pmin_db);
+    DEFINE_RTYPE_PAIR(pmin_dh);
+    DEFINE_RTYPE_PAIR(pmin_dw);
+    DEFINE_RTYPE(pminu_b);
+    DEFINE_RTYPE(pminu_h);
+    DEFINE_RTYPE_PAIR(pminu_db);
+    DEFINE_RTYPE_PAIR(pminu_dh);
+    DEFINE_RTYPE_PAIR(pminu_dw);
+    DEFINE_RTYPE(pmseq_b);
+    DEFINE_RTYPE(pmseq_h);
+    DEFINE_RTYPE_PAIR(pmseq_db);
+    DEFINE_RTYPE_PAIR(pmseq_dh);
+    DEFINE_RTYPE_PAIR(pmseq_dw);
+    DEFINE_RTYPE(pmslt_b);
+    DEFINE_RTYPE(pmslt_h);
+    DEFINE_RTYPE_PAIR(pmslt_db);
+    DEFINE_RTYPE_PAIR(pmslt_dh);
+    DEFINE_RTYPE_PAIR(pmslt_dw);
+    DEFINE_RTYPE(pmsltu_b);
+    DEFINE_RTYPE(pmsltu_h);
+    DEFINE_RTYPE_PAIR(pmsltu_db);
+    DEFINE_RTYPE_PAIR(pmsltu_dh);
+    DEFINE_RTYPE_PAIR(pmsltu_dw);
+    DEFINE_RTYPE(psll_bs);
+    DEFINE_RTYPE(psll_hs);
+    // Type 3: rdp + rs1p - Doubleword shift with scalar rs2
+    DEFINE_RTYPE_RDP_RS1P(psll_dbs);
+    DEFINE_RTYPE_RDP_RS1P(psll_dhs);
+    DEFINE_RTYPE_RDP_RS1P(psll_dws);
+    DEFINE_RTYPE(psra_bs);
+    DEFINE_RTYPE(psra_hs);
+    DEFINE_RTYPE_RDP_RS1P(psra_dbs);
+    DEFINE_RTYPE_RDP_RS1P(psra_dhs);
+    DEFINE_RTYPE_RDP_RS1P(psra_dws);
+    DEFINE_RTYPE(psrl_bs);
+    DEFINE_RTYPE(psrl_hs);
+    DEFINE_RTYPE_RDP_RS1P(psrl_dbs);
+    DEFINE_RTYPE_RDP_RS1P(psrl_dhs);
+    DEFINE_RTYPE_RDP_RS1P(psrl_dws);
+    DEFINE_RTYPE(pssha_hs);
+    DEFINE_RTYPE_RDP_RS1P(pssha_dhs);
+    DEFINE_RTYPE_RDP_RS1P(pssha_dws);
+    DEFINE_RTYPE(psshar_hs);
+    DEFINE_RTYPE_RDP_RS1P(psshar_dhs);
+    DEFINE_RTYPE_RDP_RS1P(psshar_dws);
+    DEFINE_RTYPE(psshl_hs);
+    DEFINE_RTYPE_RDP_RS1P(psshl_dhs);
+    DEFINE_RTYPE_RDP_RS1P(psshl_dws);
+    DEFINE_RTYPE(psshlr_hs);
+    DEFINE_RTYPE_RDP_RS1P(psshlr_dhs);
+    DEFINE_RTYPE_RDP_RS1P(psshlr_dws);
+    DEFINE_RTYPE(psh1add_h);
+    DEFINE_RTYPE_PAIR(psh1add_dh);
+    DEFINE_RTYPE_PAIR(psh1add_dw);
+    DEFINE_RTYPE(pssh1sadd_h);
+    DEFINE_RTYPE_PAIR(pssh1sadd_dh);
+    DEFINE_RTYPE_PAIR(pssh1sadd_dw);
+    // Type 2: rs1p - Narrowing with scalar rs2
+    DEFINE_RTYPE_RS1P(pnclip_bs);
+    DEFINE_RTYPE_RS1P(pnclip_hs);
+    DEFINE_RTYPE_RS1P(pnclipr_bs);
+    DEFINE_RTYPE_RS1P(pnclipr_hs);
+    DEFINE_RTYPE_RS1P(pnclipu_bs);
+    DEFINE_RTYPE_RS1P(pnclipu_hs);
+    DEFINE_RTYPE_RS1P(pnclipru_bs);
+    DEFINE_RTYPE_RS1P(pnclipru_hs);
+    DEFINE_RTYPE_RS1P(pnsra_bs);
+    DEFINE_RTYPE_RS1P(pnsra_hs);
+    DEFINE_RTYPE_RS1P(pnsrar_bs);
+    DEFINE_RTYPE_RS1P(pnsrar_hs);
+    DEFINE_RTYPE_RS1P(pnsrl_bs);
+    DEFINE_RTYPE_RS1P(pnsrl_hs);
+    // Type 1: rdp - Widening with scalar rs2
+    DEFINE_RTYPE_RDP(pwsll_bs);
+    DEFINE_RTYPE_RDP(pwsll_hs);
+    DEFINE_RTYPE_RDP(pwsla_bs);
+    DEFINE_RTYPE_RDP(pwsla_hs);
+    DEFINE_RTYPE(ppaire_b);
+    DEFINE_RTYPE(ppaire_h);
+    DEFINE_RTYPE_PAIR(ppaire_db);
+    DEFINE_RTYPE_PAIR(ppaire_dh);
+    DEFINE_RTYPE(ppaireo_b);
+    DEFINE_RTYPE(ppaireo_h);
+    DEFINE_RTYPE_PAIR(ppaireo_db);
+    DEFINE_RTYPE_PAIR(ppaireo_dh);
+    DEFINE_RTYPE(ppairo_b);
+    DEFINE_RTYPE(ppairo_h);
+    DEFINE_RTYPE_PAIR(ppairo_db);
+    DEFINE_RTYPE_PAIR(ppairo_dh);
+    DEFINE_RTYPE(ppairoe_b);
+    DEFINE_RTYPE(ppairoe_h);
+    DEFINE_RTYPE_PAIR(ppairoe_db);
+    DEFINE_RTYPE_PAIR(ppairoe_dh);
+    DEFINE_RTYPE(predsum_bs);
+    DEFINE_RTYPE(predsum_hs);
+    // Type 2: rs1p - Reduction sum (rd normal, rs1p is pair)
+    DEFINE_RTYPE_RS1P(predsum_dbs);
+    DEFINE_RTYPE_RS1P(predsum_dhs);
+    DEFINE_RTYPE(predsumu_bs);
+    DEFINE_RTYPE(predsumu_hs);
+    DEFINE_RTYPE_RS1P(predsumu_dbs);
+    DEFINE_RTYPE_RS1P(predsumu_dhs);
+
+    // Packed R1-type instructions (rd, rs1) - unary
+    DEFINE_R1TYPE(psabs_b);
+    DEFINE_R1TYPE(psabs_h);
+    // Type 3: rdp + rs1p - Doubleword unary ops
+    DEFINE_R1TYPE_RDP_RS1P(psabs_db);
+    DEFINE_R1TYPE_RDP_RS1P(psabs_dh);
+    DEFINE_R1TYPE(psext_h_b);
+    DEFINE_R1TYPE_RDP_RS1P(psext_dh_b);
+    DEFINE_R1TYPE_RDP_RS1P(psext_dw_b);
+    DEFINE_R1TYPE_RDP_RS1P(psext_dw_h);
+
+    // Packed I-type with shamt
+    DISASM_INSN("pslli.b", pslli_b, 0, {&xrd, &xrs1, &shamtb});
+    DISASM_INSN("pslli.h", pslli_h, 0, {&xrd, &xrs1, &shamth});
+    // Type 3: rdp + rs1p - Doubleword immediate shift
+    DISASM_INSN("pslli.db", pslli_db, 0, {&xrd_p, &xrs1_p, &shamtb});
+    DISASM_INSN("pslli.dh", pslli_dh, 0, {&xrd_p, &xrs1_p, &shamth});
+    DISASM_INSN("pslli.dw", pslli_dw, 0, {&xrd_p, &xrs1_p, &shamtw});
+    DISASM_INSN("psrai.b", psrai_b, 0, {&xrd, &xrs1, &shamtb});
+    DISASM_INSN("psrai.h", psrai_h, 0, {&xrd, &xrs1, &shamth});
+    DISASM_INSN("psrai.db", psrai_db, 0, {&xrd_p, &xrs1_p, &shamtb});
+    DISASM_INSN("psrai.dh", psrai_dh, 0, {&xrd_p, &xrs1_p, &shamth});
+    DISASM_INSN("psrai.dw", psrai_dw, 0, {&xrd_p, &xrs1_p, &shamtw});
+    DISASM_INSN("psrli.b", psrli_b, 0, {&xrd, &xrs1, &shamtb});
+    DISASM_INSN("psrli.h", psrli_h, 0, {&xrd, &xrs1, &shamth});
+    DISASM_INSN("psrli.db", psrli_db, 0, {&xrd_p, &xrs1_p, &shamtb});
+    DISASM_INSN("psrli.dh", psrli_dh, 0, {&xrd_p, &xrs1_p, &shamth});
+    DISASM_INSN("psrli.dw", psrli_dw, 0, {&xrd_p, &xrs1_p, &shamtw});
+    DISASM_INSN("psrari.h", psrari_h, 0, {&xrd, &xrs1, &shamth});
+    DISASM_INSN("psrari.dh", psrari_dh, 0, {&xrd_p, &xrs1_p, &shamth});
+    DISASM_INSN("psrari.dw", psrari_dw, 0, {&xrd_p, &xrs1_p, &shamtw});
+    DISASM_INSN("psati.h", psati_h, 0, {&xrd, &xrs1, &shamth});
+    DISASM_INSN("psati.dh", psati_dh, 0, {&xrd_p, &xrs1_p, &shamth});
+    DISASM_INSN("psati.dw", psati_dw, 0, {&xrd_p, &xrs1_p, &shamtw});
+    DISASM_INSN("pusati.h", pusati_h, 0, {&xrd, &xrs1, &shamth});
+    DISASM_INSN("pusati.dh", pusati_dh, 0, {&xrd_p, &xrs1_p, &shamth});
+    DISASM_INSN("pusati.dw", pusati_dw, 0, {&xrd_p, &xrs1_p, &shamtw});
+    DISASM_INSN("psslai.h", psslai_h, 0, {&xrd, &xrs1, &shamth});
+    DISASM_INSN("psslai.dh", psslai_dh, 0, {&xrd_p, &xrs1_p, &shamth});
+    DISASM_INSN("psslai.dw", psslai_dw, 0, {&xrd_p, &xrs1_p, &shamtw});
+    // Type 2: rs1p - Narrowing immediate (rd normal, rs1p is pair)
+    DISASM_INSN("pnclipi.b", pnclipi_b, 0, {&xrd, &xrs1_p, &shamth});
+    DISASM_INSN("pnclipi.h", pnclipi_h, 0, {&xrd, &xrs1_p, &shamtw});
+    DISASM_INSN("pnclipiu.b", pnclipiu_b, 0, {&xrd, &xrs1_p, &shamth});
+    DISASM_INSN("pnclipiu.h", pnclipiu_h, 0, {&xrd, &xrs1_p, &shamtw});
+    DISASM_INSN("pnclipri.b", pnclipri_b, 0, {&xrd, &xrs1_p, &shamth});
+    DISASM_INSN("pnclipri.h", pnclipri_h, 0, {&xrd, &xrs1_p, &shamtw});
+    DISASM_INSN("pnclipriu.b", pnclipriu_b, 0, {&xrd, &xrs1_p, &shamth});
+    DISASM_INSN("pnclipriu.h", pnclipriu_h, 0, {&xrd, &xrs1_p, &shamtw});
+    DISASM_INSN("pnsrai.b", pnsrai_b, 0, {&xrd, &xrs1_p, &shamth});
+    DISASM_INSN("pnsrai.h", pnsrai_h, 0, {&xrd, &xrs1_p, &shamtw});
+    DISASM_INSN("pnsrari.b", pnsrari_b, 0, {&xrd, &xrs1_p, &shamth});
+    DISASM_INSN("pnsrari.h", pnsrari_h, 0, {&xrd, &xrs1_p, &shamtw});
+    DISASM_INSN("pnsrli.b", pnsrli_b, 0, {&xrd, &xrs1_p, &shamth});
+    DISASM_INSN("pnsrli.h", pnsrli_h, 0, {&xrd, &xrs1_p, &shamtw});
+    // Type 1: rdp - Widening immediate (rdp is pair, rs1 normal)
+    DISASM_INSN("pwslli.b", pwslli_b, 0, {&xrd_p, &xrs1, &shamtb});
+    DISASM_INSN("pwslli.h", pwslli_h, 0, {&xrd_p, &xrs1, &shamth});
+    DISASM_INSN("pwslai.b", pwslai_b, 0, {&xrd_p, &xrs1, &shamtb});
+    DISASM_INSN("pwslai.h", pwslai_h, 0, {&xrd_p, &xrs1, &shamth});
+
+    // Packed load-immediate instructions (rd, imm) - Type 1: rdp for _db, _dh
+    DISASM_INSN("pli.b", pli_b, 0, {&xrd, &p_imm8});
+    DISASM_INSN("pli.h", pli_h, 0, {&xrd, &p_imm10csl});
+    DISASM_INSN("pli.db", pli_db, 0, {&xrd_p, &p_imm8});
+    DISASM_INSN("pli.dh", pli_dh, 0, {&xrd_p, &p_imm10csl});
+    DISASM_INSN("plui.h", plui_h, 0, {&xrd, &p_imm10csr});
+    DISASM_INSN("plui.dh", plui_dh, 0, {&xrd_p, &p_imm10csr});
+
+    // Packed multiply/mac instructions
+    DEFINE_RTYPE(pmul_h_b00);
+    DEFINE_RTYPE(pmul_h_b01);
+    DEFINE_RTYPE(pmul_h_b11);
+    DEFINE_RTYPE(pmulu_h_b00);
+    DEFINE_RTYPE(pmulu_h_b01);
+    DEFINE_RTYPE(pmulu_h_b11);
+    DEFINE_RTYPE(pmulsu_h_b00);
+    DEFINE_RTYPE(pmulsu_h_b11);
+    DEFINE_RTYPE(pmulh_h);
+    DEFINE_RTYPE(pmulhu_h);
+    DEFINE_RTYPE(pmulhsu_h);
+    DEFINE_RTYPE(pmulh_h_b0);
+    DEFINE_RTYPE(pmulh_h_b1);
+    DEFINE_RTYPE(pmulhsu_h_b0);
+    DEFINE_RTYPE(pmulhsu_h_b1);
+    DEFINE_RTYPE(pmulhr_h);
+    DEFINE_RTYPE(pmulhru_h);
+    DEFINE_RTYPE(pmulhrsu_h);
+    DEFINE_RTYPE(pmulq_h);
+    DEFINE_RTYPE(pmulqr_h);
+    DEFINE_RTYPE(pmhacc_h);
+    DEFINE_RTYPE(pmhaccu_h);
+    DEFINE_RTYPE(pmhaccsu_h);
+    DEFINE_RTYPE(pmhacc_h_b0);
+    DEFINE_RTYPE(pmhacc_h_b1);
+    DEFINE_RTYPE(pmhaccsu_h_b0);
+    DEFINE_RTYPE(pmhaccsu_h_b1);
+    DEFINE_RTYPE(pmhracc_h);
+    DEFINE_RTYPE(pmhraccu_h);
+    DEFINE_RTYPE(pmhraccsu_h);
+    DEFINE_RTYPE(pmq2add_h);
+    DEFINE_RTYPE(pmq2adda_h);
+    DEFINE_RTYPE(pmqr2add_h);
+    DEFINE_RTYPE(pmqr2adda_h);
+
+    // Packed widening instructions - Type 1: rdp (pair result, normal sources)
+    DEFINE_RTYPE_RDP(pwadd_b);
+    DEFINE_RTYPE_RDP(pwadd_h);
+    DEFINE_RTYPE_RDP(pwaddu_b);
+    DEFINE_RTYPE_RDP(pwaddu_h);
+    DEFINE_RTYPE_RDP(pwadda_b);
+    DEFINE_RTYPE_RDP(pwadda_h);
+    DEFINE_RTYPE_RDP(pwaddau_b);
+    DEFINE_RTYPE_RDP(pwaddau_h);
+    DEFINE_RTYPE_RDP(pwsub_b);
+    DEFINE_RTYPE_RDP(pwsub_h);
+    DEFINE_RTYPE_RDP(pwsubu_b);
+    DEFINE_RTYPE_RDP(pwsubu_h);
+    DEFINE_RTYPE_RDP(pwsuba_b);
+    DEFINE_RTYPE_RDP(pwsuba_h);
+    DEFINE_RTYPE_RDP(pwsubau_b);
+    DEFINE_RTYPE_RDP(pwsubau_h);
+    DEFINE_RTYPE_RDP(pwmul_b);
+    DEFINE_RTYPE_RDP(pwmul_h);
+    DEFINE_RTYPE_RDP(pwmulu_b);
+    DEFINE_RTYPE_RDP(pwmulu_h);
+    DEFINE_RTYPE_RDP(pwmulsu_b);
+    DEFINE_RTYPE_RDP(pwmulsu_h);
+    DEFINE_RTYPE_RDP(pwmacc_h);
+    DEFINE_RTYPE_RDP(pwmaccu_h);
+    DEFINE_RTYPE_RDP(pwmaccsu_h);
+
+    // Packed multi-add instructions
+    DEFINE_RTYPE(pm2add_h);
+    DEFINE_RTYPE(pm2add_hx);
+    DEFINE_RTYPE(pm2addu_h);
+    DEFINE_RTYPE(pm2addsu_h);
+    DEFINE_RTYPE(pm2adda_h);
+    DEFINE_RTYPE(pm2adda_hx);
+    DEFINE_RTYPE(pm2addau_h);
+    DEFINE_RTYPE(pm2addasu_h);
+    DEFINE_RTYPE(pm2sub_h);
+    DEFINE_RTYPE(pm2sub_hx);
+    DEFINE_RTYPE(pm2suba_h);
+    DEFINE_RTYPE(pm2suba_hx);
+    DEFINE_RTYPE(pm2sadd_h);
+    DEFINE_RTYPE(pm2sadd_hx);
+    // pm2wadd produces widened result - Type 1: rdp
+    DEFINE_RTYPE_RDP(pm2wadd_h);
+    DEFINE_RTYPE_RDP(pm2wadd_hx);
+    DEFINE_RTYPE_RDP(pm2waddu_h);
+    DEFINE_RTYPE_RDP(pm2waddsu_h);
+    DEFINE_RTYPE_RDP(pm2wadda_h);
+    DEFINE_RTYPE_RDP(pm2wadda_hx);
+    DEFINE_RTYPE_RDP(pm2waddau_h);
+    DEFINE_RTYPE_RDP(pm2waddasu_h);
+    DEFINE_RTYPE_RDP(pm2wsub_h);
+    DEFINE_RTYPE_RDP(pm2wsub_hx);
+    DEFINE_RTYPE_RDP(pm2wsuba_h);
+    DEFINE_RTYPE_RDP(pm2wsuba_hx);
+    DEFINE_RTYPE(pm4add_b);
+    DEFINE_RTYPE(pm4addu_b);
+    DEFINE_RTYPE(pm4addsu_b);
+    DEFINE_RTYPE(pm4adda_b);
+    DEFINE_RTYPE(pm4addau_b);
+    DEFINE_RTYPE(pm4addasu_b);
+
+    // Zip/Unzip instructions
+    DEFINE_R1TYPE(zip8p);
+    DEFINE_R1TYPE(zip8hp);
+    DEFINE_R1TYPE(unzip8p);
+    DEFINE_R1TYPE(unzip8hp);
+    DEFINE_R1TYPE(unzip16p);
+    DEFINE_R1TYPE(unzip16hp);
+    // Type 1: rdp - Widening zip (pair result)
+    DEFINE_R1TYPE_RDP(wzip8p);
+    DEFINE_R1TYPE_RDP(wzip16p);
+
+    // mqwacc instructions - Type 1: rdp (widened 64-bit result)
+    DEFINE_RTYPE_RDP(mqwacc);
+    DEFINE_RTYPE_RDP(mqrwacc);
+    DEFINE_RTYPE_RDP(pmqwacc_h);
+    DEFINE_RTYPE_RDP(pmqrwacc_h);
+
+    // RV64 P-extension instructions (word-sized operations)
+    // These share opcodes with RV32 scalar instructions
+    if (xlen_eq(64)) {
+      // R1-type unary instructions
+      DEFINE_R1TYPE(absw);
+      DEFINE_R1TYPE(clsw);
+
+      // R-type scalar MAC/MUL instructions (word-sized)
+      DEFINE_RTYPE(macc_w00);
+      DEFINE_RTYPE(macc_w01);
+      DEFINE_RTYPE(macc_w11);
+      DEFINE_RTYPE(maccu_w00);
+      DEFINE_RTYPE(maccu_w01);
+      DEFINE_RTYPE(maccu_w11);
+      DEFINE_RTYPE(maccsu_w00);
+      DEFINE_RTYPE(maccsu_w11);
+      DEFINE_RTYPE(mul_w00);
+      DEFINE_RTYPE(mul_w01);
+      DEFINE_RTYPE(mul_w11);
+      DEFINE_RTYPE(mulu_w00);
+      DEFINE_RTYPE(mulu_w01);
+      DEFINE_RTYPE(mulu_w11);
+      DEFINE_RTYPE(mulsu_w00);
+      DEFINE_RTYPE(mulsu_w11);
+      DEFINE_RTYPE(mqacc_w00);
+      DEFINE_RTYPE(mqacc_w01);
+      DEFINE_RTYPE(mqacc_w11);
+      DEFINE_RTYPE(mqracc_w00);
+      DEFINE_RTYPE(mqracc_w01);
+      DEFINE_RTYPE(mqracc_w11);
+
+      // R-type packed word-sized instructions (share opcode with RV32 scalar)
+      DEFINE_RTYPE(paadd_w);
+      DEFINE_RTYPE(paaddu_w);
+      DEFINE_RTYPE(paas_wx);
+      DEFINE_RTYPE(padd_w);
+      DEFINE_RTYPE(padd_ws);
+      DEFINE_RTYPE(pasa_wx);
+      DEFINE_RTYPE(pasub_w);
+      DEFINE_RTYPE(pasubu_w);
+      DEFINE_RTYPE(pas_wx);
+      DEFINE_RTYPE(pmax_w);
+      DEFINE_RTYPE(pmaxu_w);
+      DEFINE_RTYPE(pmin_w);
+      DEFINE_RTYPE(pminu_w);
+      DEFINE_RTYPE(pmseq_w);
+      DEFINE_RTYPE(pmslt_w);
+      DEFINE_RTYPE(pmsltu_w);
+      DEFINE_RTYPE(psadd_w);
+      DEFINE_RTYPE(psaddu_w);
+      DEFINE_RTYPE(psa_wx);
+      DEFINE_RTYPE(psas_wx);
+      DEFINE_RTYPE(pssa_wx);
+      DEFINE_RTYPE(pssub_w);
+      DEFINE_RTYPE(pssubu_w);
+      DEFINE_RTYPE(psub_w);
+      DEFINE_RTYPE(psh1add_w);
+      DEFINE_RTYPE(pssh1sadd_w);
+      DEFINE_RTYPE(psll_ws);
+      DEFINE_RTYPE(psra_ws);
+      DEFINE_RTYPE(psrl_ws);
+      DEFINE_RTYPE(pssha_ws);
+      DEFINE_RTYPE(psshar_ws);
+      DEFINE_RTYPE(psshl_ws);
+      DEFINE_RTYPE(psshlr_ws);
+      DEFINE_RTYPE(shl);
+      DEFINE_RTYPE(shlr);
+      DEFINE_RTYPE(pnclipp_b);
+      DEFINE_RTYPE(pnclipp_h);
+      DEFINE_RTYPE(pnclipp_w);
+      DEFINE_RTYPE(pnclipup_b);
+      DEFINE_RTYPE(pnclipup_h);
+      DEFINE_RTYPE(pnclipup_w);
+      DEFINE_RTYPE(ppaireo_w);
+      DEFINE_RTYPE(ppairoe_w);
+      DEFINE_RTYPE(ppairo_w);
+      DEFINE_RTYPE(predsum_ws);
+      DEFINE_RTYPE(predsumu_ws);
+
+      // Packed multiply/mac word-sized instructions (share opcode with RV32 scalar)
+      DEFINE_RTYPE(pmul_w_h00);
+      DEFINE_RTYPE(pmul_w_h01);
+      DEFINE_RTYPE(pmul_w_h11);
+      DEFINE_RTYPE(pmulu_w_h00);
+      DEFINE_RTYPE(pmulu_w_h01);
+      DEFINE_RTYPE(pmulu_w_h11);
+      DEFINE_RTYPE(pmulsu_w_h00);
+      DEFINE_RTYPE(pmulsu_w_h11);
+      DEFINE_RTYPE(pmulh_w);
+      DEFINE_RTYPE(pmulhu_w);
+      DEFINE_RTYPE(pmulhsu_w);
+      DEFINE_RTYPE(pmulh_w_h0);
+      DEFINE_RTYPE(pmulh_w_h1);
+      DEFINE_RTYPE(pmulhsu_w_h0);
+      DEFINE_RTYPE(pmulhsu_w_h1);
+      DEFINE_RTYPE(pmulhr_w);
+      DEFINE_RTYPE(pmulhru_w);
+      DEFINE_RTYPE(pmulhrsu_w);
+      DEFINE_RTYPE(pmulq_w);
+      DEFINE_RTYPE(pmulqr_w);
+      DEFINE_RTYPE(pmacc_w_h00);
+      DEFINE_RTYPE(pmacc_w_h01);
+      DEFINE_RTYPE(pmacc_w_h11);
+      DEFINE_RTYPE(pmaccu_w_h00);
+      DEFINE_RTYPE(pmaccu_w_h01);
+      DEFINE_RTYPE(pmaccu_w_h11);
+      DEFINE_RTYPE(pmaccsu_w_h00);
+      DEFINE_RTYPE(pmaccsu_w_h11);
+      DEFINE_RTYPE(pmhacc_w);
+      DEFINE_RTYPE(pmhaccu_w);
+      DEFINE_RTYPE(pmhaccsu_w);
+      DEFINE_RTYPE(pmhacc_w_h0);
+      DEFINE_RTYPE(pmhacc_w_h1);
+      DEFINE_RTYPE(pmhaccsu_w_h0);
+      DEFINE_RTYPE(pmhaccsu_w_h1);
+      DEFINE_RTYPE(pmhracc_w);
+      DEFINE_RTYPE(pmhraccu_w);
+      DEFINE_RTYPE(pmhraccsu_w);
+      DEFINE_RTYPE(pmqacc_w_h00);
+      DEFINE_RTYPE(pmqacc_w_h01);
+      DEFINE_RTYPE(pmqacc_w_h11);
+      DEFINE_RTYPE(pmqracc_w_h00);
+      DEFINE_RTYPE(pmqracc_w_h01);
+      DEFINE_RTYPE(pmqracc_w_h11);
+      DEFINE_RTYPE(pmq2add_w);
+      DEFINE_RTYPE(pmq2adda_w);
+      DEFINE_RTYPE(pmqr2add_w);
+      DEFINE_RTYPE(pmqr2adda_w);
+
+      // Packed multi-add word-sized instructions
+      DEFINE_RTYPE(pm2add_w);
+      DEFINE_RTYPE(pm2add_wx);
+      DEFINE_RTYPE(pm2addu_w);
+      DEFINE_RTYPE(pm2addsu_w);
+      DEFINE_RTYPE(pm2adda_w);
+      DEFINE_RTYPE(pm2adda_wx);
+      DEFINE_RTYPE(pm2addau_w);
+      DEFINE_RTYPE(pm2addasu_w);
+      DEFINE_RTYPE(pm2sub_w);
+      DEFINE_RTYPE(pm2sub_wx);
+      DEFINE_RTYPE(pm2suba_w);
+      DEFINE_RTYPE(pm2suba_wx);
+      DEFINE_RTYPE(pm4add_h);
+      DEFINE_RTYPE(pm4addu_h);
+      DEFINE_RTYPE(pm4addsu_h);
+      DEFINE_RTYPE(pm4adda_h);
+      DEFINE_RTYPE(pm4addau_h);
+      DEFINE_RTYPE(pm4addasu_h);
+
+      // R1-type packed word-sized unary instructions
+      DEFINE_R1TYPE(psext_w_b);
+      DEFINE_R1TYPE(psext_w_h);
+      DEFINE_R1TYPE(zip16p);
+      DEFINE_R1TYPE(zip16hp);
+
+      // Packed I-type with shamt (word-sized) - share opcode with RV32 scalar
+      DISASM_INSN("pslli.w", pslli_w, 0, {&xrd, &xrs1, &shamtw});
+      DISASM_INSN("psrai.w", psrai_w, 0, {&xrd, &xrs1, &shamtw});
+      DISASM_INSN("psrli.w", psrli_w, 0, {&xrd, &xrs1, &shamtw});
+      DISASM_INSN("psrari.w", psrari_w, 0, {&xrd, &xrs1, &shamtw});
+      DISASM_INSN("psati.w", psati_w, 0, {&xrd, &xrs1, &shamtw});
+      DISASM_INSN("pusati.w", pusati_w, 0, {&xrd, &xrs1, &shamtw});
+      DISASM_INSN("psslai.w", psslai_w, 0, {&xrd, &xrs1, &shamtw});
+
+      // Packed load-immediate word-sized instructions
+      DISASM_INSN("pli.w", pli_w, 0, {&xrd, &p_imm10csl});
+      DISASM_INSN("plui.w", plui_w, 0, {&xrd, &p_imm10csr});
+    }
+  }
+
 }
 
-disassembler_t::disassembler_t(const isa_parser_t *isa)
+disassembler_t::disassembler_t(const isa_parser_t *isa, bool strict)
 {
   // highest priority: instructions explicitly enabled
-  add_instructions(isa);
+  add_instructions(isa, true);
 
-  // next-highest priority: other instructions in same base ISA
-  std::string fallback_isa_string = std::string("rv") + std::to_string(isa->get_max_xlen()) +
-    "gqcvh_zfh_zfa_zba_zbb_zbc_zbs_zcb_zicbom_zicboz_zicond_zk_zks_svinval_"
-    "zcmop_zimop_zawrs_zicfiss_zicfilp_zvknc_zvkg_zvfbfmin_zvfbfwma_zfbfmin";
-  isa_parser_t fallback_isa(fallback_isa_string.c_str(), DEFAULT_PRIV);
-  add_instructions(&fallback_isa);
+  if (!strict) {
+    // next-highest priority: other instructions in same base ISA
+    add_instructions(isa, false);
 
-  // finally: instructions with known opcodes but unknown arguments
-  add_unknown_insns(this);
+    // finally: instructions with known opcodes but unknown arguments
+    add_unknown_insns(this);
+  }
 
   // Now, reverse the lists, because we search them back-to-front (so that
   // custom instructions later added with add_insn have highest priority).
