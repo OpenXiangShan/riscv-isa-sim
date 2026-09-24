@@ -756,7 +756,7 @@ reg_t mstatus_csr_t::compute_mstatus_initial_value() const noexcept {
          | (proc->extension_enabled_const('S') && (proc->get_const_xlen() != 32) ? set_field((reg_t)0, MSTATUS_SXL, xlen_to_uxl(proc->get_const_xlen())) : 0)
          | (proc->get_mmu()->is_target_big_endian() ? big_endian_bits : 0)
 #if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
-         | 0
+         | (CONFIG_MDT_INIT ? MSTATUS_MDT : 0)
 #else
          | (proc->extension_enabled(EXT_SMDBLTRP) ? MSTATUS_MDT : 0)
 #endif
@@ -766,7 +766,7 @@ reg_t mstatus_csr_t::compute_mstatus_initial_value() const noexcept {
 // implement class mnstatus_csr_t
 mnstatus_csr_t::mnstatus_csr_t(processor_t* const proc, const reg_t addr):
 #if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
-  basic_csr_t(proc, addr, MNSTATUS_NMIE)
+  basic_csr_t(proc, addr, CONFIG_NMIE_INIT ? MNSTATUS_NMIE : 0)
 #else
   basic_csr_t(proc, addr, 0)
 #endif
