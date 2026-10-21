@@ -51,9 +51,11 @@ void DifftestRef::skip_one(bool isRVC, bool wen, uint32_t wdest, uint64_t wdata)
   if (wen) {
     state->XPR.write(wdest, wdata);
   }
-  // minstret decrements itself when written to match Spike's automated increment.
-  // Therefore, we need to add + 2 here.
-  state->minstret->write(state->minstret->read() + 2);
+  // The skipped instruction retires: count it as the step loop counts a retired instruction
+  // (execute.cc). Writing minstret here instead leaves the write pending until the next step,
+  // so two skips in a row would write it twice without a bump in between, which
+  // wide_counter_csr_t::unlogged_write asserts never happens.
+  state->minstret->bump((state->mcountinhibit->read() & MCOUNTINHIBIT_IR) ? 0 : 1);
 }
 
 void DifftestRef::get_regs(diff_context_t *ctx) {
