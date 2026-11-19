@@ -1194,6 +1194,12 @@ void medeleg_csr_t::verify_permissions(insn_t insn, bool write) const {
 
 bool medeleg_csr_t::unlogged_write(const reg_t val) noexcept {
   const reg_t mask = 0
+#ifdef CPU_XIANGSHAN
+    // XS implements these delegation bits as RW, including when the
+    // corresponding exception cannot currently be generated.
+    | (1 << CAUSE_MISALIGNED_FETCH)
+    | (1 << CAUSE_SOFTWARE_CHECK_FAULT)
+#endif
     | (proc->extension_enabled(EXT_ZCA) ? 0 : 1 << CAUSE_MISALIGNED_FETCH)
 #if !defined(CPU_ROCKET_CHIP)
     | (1 << CAUSE_FETCH_ACCESS)

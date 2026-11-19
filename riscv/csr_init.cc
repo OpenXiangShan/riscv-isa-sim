@@ -282,6 +282,9 @@ void state_t::csr_init(processor_t* const proc, reg_t max_isa)
     (1 << CAUSE_FETCH_PAGE_FAULT) |
     (1 << CAUSE_LOAD_PAGE_FAULT) |
     (1 << CAUSE_STORE_PAGE_FAULT) |
+#ifdef CPU_XIANGSHAN
+    (1 << CAUSE_SOFTWARE_CHECK_FAULT) |
+#endif
     ((proc->extension_enabled(EXT_ZICFISS) || proc->extension_enabled(EXT_ZICFILP))?
      (1 << CAUSE_SOFTWARE_CHECK_FAULT) : 0) |
     (proc->extension_enabled(EXT_ZICNTR)?

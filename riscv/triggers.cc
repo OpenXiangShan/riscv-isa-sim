@@ -602,6 +602,14 @@ bool module_t::tdata1_write(unsigned index, const reg_t val) noexcept
     return false;
 
   unsigned type = get_field(val, CSR_TDATA1_TYPE(xlen));
+#if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
+  // The advertised capabilities also constrain actual writes: only slot 0
+  // accepts icount, and legacy mcontrol is not implemented by XS.
+  if (!(tinfo_read(index) & (reg_t(1) << type))) {
+    type = CSR_TDATA1_TYPE_DISABLED;
+    tdata1 = set_field(tdata1, CSR_TDATA1_DMODE(xlen), 0);
+  }
+#endif
   reg_t tdata2 = triggers[index]->tdata2_read(proc);
   reg_t tdata3 = triggers[index]->tdata3_read(proc);
   delete triggers[index];
@@ -723,7 +731,12 @@ std::optional<match_result_t> module_t::detect_trap_match(const trap_t& t) noexc
 reg_t module_t::tinfo_read(unsigned UNUSED index) const noexcept
 {
 #if defined(DIFFTEST) && defined(CPU_XIANGSHAN)
-  return (1 << CSR_TDATA1_TYPE_MCONTROL6) ;
+  reg_t info = (reg_t(CSR_TINFO_VERSION_1) << CSR_TINFO_VERSION_OFFSET) |
+               (reg_t(1) << CSR_TDATA1_TYPE_MCONTROL6) |
+               (reg_t(1) << CSR_TDATA1_TYPE_ITRIGGER) |
+               (reg_t(1) << CSR_TDATA1_TYPE_ETRIGGER);
+  if (index == 0) info |= reg_t(1) << CSR_TDATA1_TYPE_ICOUNT;
+  return info;
 #else
   /* In spike, every trigger supports the same types. */
   return (1 << CSR_TDATA1_TYPE_MCONTROL) |
